@@ -1,0 +1,44 @@
+{
+  "name": "applytics",
+  "description": "A private AI-assisted job application ledger.",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"tsx watch server/index.ts\" \"vite --host 127.0.0.1\"",
+    "build": "tsc --noEmit && vite build",
+    "start": "tsx server/db/migrate.ts && tsx server/index.ts",
+    "migrate": "tsx server/db/migrate.ts",
+    "test": "vitest run",
+    "test:db": "tsx server/db/integration.ts",
+    "db:local": "tsx server/db/local.ts",
+    "ai:parse": "tsx server/ai/job-parser/cli.ts",
+    "format": "prettier --write src server shared vite.config.ts tsconfig.json package.json README.md",
+    "format:check": "prettier --check src server shared vite.config.ts tsconfig.json package.json README.md"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "google-auth-library": "^11.1.0",
+    "motion": "^13.4.1",
+    "pg": "^8.13.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tsx": "^4.23.15",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.13.10",
+    "@types/pg": "^8.11.11",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "embedded-postgres": "^18.4.0-beta.17",
+    "prettier": "^3.9.8",
+    "typescript": "^5.7.3",
+    "vite": "^6.2.0",
+    "vitest": "^4.1.11"
+  }
+}
