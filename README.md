@@ -108,3 +108,5 @@ Public registration currently does not verify email ownership or provide passwor
 The production build is served by Express, so Applytics can run as one Node web service plus one managed PostgreSQL database. Set the environment variables above, run `npm run build`, and use `npm start` as the start command. In production the server binds to `0.0.0.0` automatically and applies pending migrations before starting.
 
 The intended custom domain is `applytics.siriushou.com`. Point that Hostinger subdomain to the hosting provider with the CNAME value supplied by the provider. Keep PostgreSQL and all secrets server-side, enable HTTPS, configure the production Google origin, and back up the database before migrating local records.
+
+The included [`render.yaml`](render.yaml) defines the web service without embedding credentials. Render prompts for the Supabase connection string, OpenAI key, and optional Google client ID during setup.
