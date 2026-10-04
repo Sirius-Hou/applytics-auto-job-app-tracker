@@ -1,120 +1,29 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AnimatePresence, motion } from 'motion/react';
 import { categories, arrangements, statuses, terms, type Application } from '../shared/contracts';
 import { label, request, Field, MultiSelect, Select } from './components/common';
 import { Add } from './components/Add';
 import { Detail } from './components/Detail';
-import { Auth, type SessionUser } from './components/Auth';
+import { Auth } from './components/Auth';
 import { Settings } from './components/Settings';
+import { useApplicationList } from './controllers/useApplicationList';
+import { useAsyncStatus } from './controllers/useAsyncStatus';
+import { useNotifications } from './controllers/useNotifications';
+import { useSession } from './controllers/useSession';
+import type { AppView } from './controllers/types';
 import './style.css';
-type Row = {
-  id: string;
-  company: string | null;
-  title: string | null;
-  status: string;
-  appliedAt: string;
-  category: string;
-  term: string;
-  workArrangement: string;
-  countryCode: string | null;
-  updatedAt: string;
-};
 function App() {
-  const [view, setView] = useState<'list' | 'add' | 'detail' | 'settings'>('list');
-  const [user, setUser] = useState<SessionUser | null | undefined>(undefined);
-  const [items, setItems] = useState<Row[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(25);
-  const [filters, setFilters] = useState<Record<string, string>>({});
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [view, setView] = useState<AppView>('list');
+  const { user, setUser } = useSession();
+  const { busy, error, run, setBusy, setError } = useAsyncStatus();
   const [detail, setDetail] = useState<Application | null>(null);
   const [revision, setRevision] = useState(0);
-  const [stats, setStats] = useState({ total: 0, month: 0, year: 0 });
+  const { items, total, page, setPage, limit, filters, stats, filter, clearFilters, changeLimit } =
+    useApplicationList({ view, user, revision, setBusy, setError });
   const [statCard, setStatCard] = useState(0);
   const [statDirection, setStatDirection] = useState(1);
-  const [toast, setToast] = useState('');
-  const run = useCallback(async (fn: () => Promise<void>) => {
-    setError('');
-    setBusy(true);
-    try {
-      await fn();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong');
-    } finally {
-      setBusy(false);
-    }
-  }, []);
-  useEffect(() => {
-    fetch('/api/auth/session')
-      .then(async (response) =>
-        setUser(response.ok ? ((await response.json()) as SessionUser) : null),
-      )
-      .catch(() => setUser(null));
-  }, []);
-  useEffect(() => {
-    if (view !== 'list' || !user) return;
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      setBusy(true);
-      setError('');
-      const params = new URLSearchParams({
-        ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)),
-        page: String(page),
-        limit: String(limit),
-      });
-      request<{ items: Row[]; total: number }>('/applications?' + params)
-        .then((r) => {
-          if (!cancelled) {
-            setItems(r.items);
-            setTotal(r.total);
-          }
-        })
-        .catch((e) => {
-          if (!cancelled) {
-            setError(e.message);
-            setItems([]);
-            setTotal(0);
-          }
-        })
-        .finally(() => {
-          if (!cancelled) setBusy(false);
-        });
-    }, 200);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [filters, page, limit, view, revision, user]);
-  useEffect(() => {
-    if (view !== 'list' || !user) return;
-    let cancelled = false;
-    Promise.all([
-      request<{ total: number }>('/applications?limit=1'),
-      request<{ total: number }>('/applications?limit=1&appliedWithin=1m'),
-      request<{ total: number }>('/applications?limit=1&appliedWithin=1y'),
-    ])
-      .then(([all, month, year]) => {
-        if (!cancelled)
-          setStats({
-            total: all.total,
-            month: month.total,
-            year: year.total,
-          });
-      })
-      .catch((cause) => {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : 'Could not load totals');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [view, revision, user]);
-  const filter = (k: string, v: string) => {
-    setPage(1);
-    setFilters({ ...filters, [k]: v });
-  };
+  const { toast, notify } = useNotifications();
   const open = (id: string) =>
     run(async () => {
       setDetail(await request<Application>('/applications/' + id));
@@ -282,13 +191,7 @@ function App() {
               <div className="filters-header">
                 <h2>Search for Jobs</h2>
                 {Object.values(filters).some(Boolean) && (
-                  <button
-                    className="text-button"
-                    onClick={() => {
-                      setFilters({});
-                      setPage(1);
-                    }}
-                  >
+                  <button className="text-button" onClick={clearFilters}>
                     Clear all
                   </button>
                 )}
@@ -479,10 +382,7 @@ function App() {
                   name="Per page"
                   value={String(limit)}
                   options={['10', '25', '50', '100']}
-                  onChange={(value) => {
-                    setPage(1);
-                    setLimit(Number(value));
-                  }}
+                  onChange={changeLimit}
                 />
                 <button disabled={page * limit >= total || busy} onClick={() => setPage(page + 1)}>
                   Next →
@@ -497,8 +397,7 @@ function App() {
             saved={(a) => {
               setDetail(a);
               setRevision((v) => v + 1);
-              setToast('Application added to your list.');
-              window.setTimeout(() => setToast(''), 3500);
+              notify('Application added to your list.');
               setView('detail');
             }}
           />
@@ -507,8 +406,7 @@ function App() {
             user={user}
             run={run}
             passwordChanged={() => {
-              setToast('Password changed successfully.');
-              window.setTimeout(() => setToast(''), 3500);
+              notify('Password changed successfully.');
             }}
             signedOut={() => {
               setDetail(null);
@@ -531,8 +429,7 @@ function App() {
               deleted={() => {
                 setDetail(null);
                 setRevision((value) => value + 1);
-                setToast('Application deleted.');
-                window.setTimeout(() => setToast(''), 3500);
+                notify('Application deleted.');
                 setView('list');
               }}
             />

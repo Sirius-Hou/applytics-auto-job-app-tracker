@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   categories,
   terms,
@@ -7,10 +6,10 @@ import {
   sectionTypes,
   skillTypes,
   roleSummaryTags,
-  type Job,
   type Application,
 } from '../../shared/contracts';
-import { dayToIso, label, localDay, request, Field, Select, type Runner } from './common';
+import { label, Field, Select, type Runner } from './common';
+import { useAddApplication } from '../controllers/useAddApplication';
 export function Add({
   busy,
   run,
@@ -20,13 +19,22 @@ export function Add({
   run: Runner;
   saved: (a: Application) => void;
 }) {
-  const [raw, setRaw] = useState('');
-  const [url, setUrl] = useState('');
-  const [job, setJob] = useState<Job | null>(null);
-  const [status, setStatus] = useState('APPLIED');
-  const [applied, setApplied] = useState(localDay());
-  const [notes, setNotes] = useState('');
-  const edit = (key: keyof Job, value: unknown) => setJob((j) => (j ? { ...j, [key]: value } : j));
+  const {
+    raw,
+    setRaw,
+    url,
+    setUrl,
+    job,
+    editJob: edit,
+    status,
+    setStatus,
+    applied,
+    setApplied,
+    notes,
+    setNotes,
+    parse,
+    save,
+  } = useAddApplication({ run, saved });
   return (
     <>
       <div className="title-row">
@@ -42,38 +50,19 @@ export function Add({
       </div>
       <section className="panel form">
         <h2>Original posting</h2>
-        <Field
-          name="Job URL"
-          value={url}
-          type="url"
-          onChange={(v) => {
-            setUrl(v);
-            setJob(null);
-          }}
-        />
+        <Field name="Job URL" value={url} type="url" onChange={setUrl} />
         <label>
           Full job description
           <textarea
             className="jd-input"
             value={raw}
-            onChange={(e) => {
-              setRaw(e.target.value);
-              setJob(null);
-            }}
+            onChange={(e) => setRaw(e.target.value)}
             placeholder="Paste the complete job description here…"
           />
         </label>
         <div className="actions">
           <p>AI extraction with strict validation. Missing details stay unknown.</p>
-          <button
-            className="primary"
-            disabled={busy || !raw.trim() || !url}
-            onClick={() =>
-              run(async () =>
-                setJob(await request<Job>('/parse', 'POST', { rawJd: raw, originalUrl: url })),
-              )
-            }
-          >
+          <button className="primary" disabled={busy || !raw.trim() || !url} onClick={parse}>
             {busy ? 'Parsing with AI…' : 'Parse with AI →'}
           </button>
         </div>
@@ -456,22 +445,7 @@ export function Add({
           </label>
           <div className="actions">
             <span>Original JD is preserved exactly as pasted.</span>
-            <button
-              className="primary"
-              disabled={busy || !applied}
-              onClick={() =>
-                run(async () =>
-                  saved(
-                    await request<Application>('/applications', 'POST', {
-                      job,
-                      status,
-                      appliedAt: dayToIso(applied),
-                      notes,
-                    }),
-                  ),
-                )
-              }
-            >
+            <button className="primary" disabled={busy || !applied} onClick={save}>
               {busy ? 'Saving…' : 'Save application'}
             </button>
           </div>

@@ -10,32 +10,41 @@ Local development runs Vite on port 5173 and Express on port 3001; Vite proxies 
 
 ### Entry point and navigation
 
-- `src/main.tsx` is both entry point and top-level application controller.
+- `src/main.tsx` is the entry point, authenticated shell, in-memory view coordinator, and list presentation.
 - There is no router library. `view: 'list' | 'add' | 'detail' | 'settings'` selects authenticated pages.
 - `window.location.pathname === '/reset-password'` is the sole explicit route check.
 - `detail` stores the selected full application object; it is fetched before switching view.
-- Sidebar, list dashboard, carousel, filters, table, pagination, global errors, and toasts all live directly in `main.tsx`.
+- Sidebar, list dashboard, carousel, filters, table, pagination, and global error/toast rendering remain in `main.tsx`; their behavioral state is supplied by controllers.
 
 ### State management
 
-- React `useState`, `useEffect`, and `useCallback` only; no context or external store.
+- React hooks only; no context or external store.
 - `user` has three meanings: `undefined` checking session, `null` signed out, object signed in.
-- `run(fn)` centralizes a single global `busy` flag and global error message.
-- List refresh is driven by filters/page/limit/view/revision/user. Mutations increment `revision` to refresh list/statistics later.
-- Toasts are string state plus unmanaged 3.5-second timers.
-- Form state is local to `Auth`, `Add`, `Detail`, and `Settings`.
+- `useAsyncStatus` centralizes the existing single global `busy` flag, error message, and `run(fn)` behavior.
+- `useApplicationList` owns filters, pagination, list fetching, the 200 ms debounce, and the three existing statistic requests. Mutations still increment `revision` in `App` to refresh list/statistics later.
+- `useNotifications` owns the existing string toast and 3.5-second timing.
+- Workflow form state is owned by feature controllers and consumed by the current presentation components.
 
 ### Components
 
-| File/component | Current responsibility | Layer | Risk |
-|---|---|---|---|
-| `src/main.tsx` / `App` | Auth gate, view navigation, data fetching, filters, stats, list/table, pagination, errors/toasts | Mixed | High |
-| `src/components/Auth.tsx` | Login/register/forgot/reset UI plus Google script initialization and auth requests | Mixed | High |
-| `src/components/Add.tsx` | Parse workflow, complete pre-save edit model, create request | Mixed | High |
-| `src/components/Detail.tsx` | Detail presentation, notes/date mutation, timeline CRUD, application deletion | Mixed | High |
-| `src/components/Settings.tsx` | Account presentation plus password/reset/logout/delete workflows | Mixed | High |
-| `src/components/common.tsx` | Label formatting, date conversion, fetch wrapper, basic field/select/multiselect | Shared | Medium |
-| `src/style.css` | Entire visual system, responsive layout, statuses, forms, modals, animation presentation | Presentation | Low, except selectors encode DOM assumptions |
+| File/component                            | Current responsibility                                                                                  | Layer           | Risk                                         |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------- | --------------- | -------------------------------------------- |
+| `src/main.tsx` / `App`                    | Auth gate, view transitions, selected detail/revision coordination, current shell and list presentation | Mixed           | Medium                                       |
+| `src/components/Auth.tsx`                 | Authentication form presentation consuming `useAuth`                                                    | Presentation    | Medium                                       |
+| `src/components/Add.tsx`                  | Complete Job review form consuming `useAddApplication`                                                  | Presentation    | Medium                                       |
+| `src/components/Detail.tsx`               | Application/detail/timeline presentation consuming `useApplicationDetail`                               | Presentation    | Medium                                       |
+| `src/components/Settings.tsx`             | Account/security presentation consuming `useAccountSettings`                                            | Presentation    | Medium                                       |
+| `src/controllers/useSession.ts`           | Startup session restoration and three-state user model                                                  | Controller      | High                                         |
+| `src/controllers/useApplicationList.ts`   | List query serialization, debounce, pagination, filters, and dashboard totals                           | Controller      | High                                         |
+| `src/controllers/useAddApplication.ts`    | Parse, invalidate, mutable review model, and save boundary                                              | Controller      | High                                         |
+| `src/controllers/useApplicationDetail.ts` | Notes/date mutations, timeline CRUD, and application deletion requests                                  | Controller      | High                                         |
+| `src/controllers/useAccountSettings.ts`   | Password, reset-email, logout, account deletion, and modal workflow state                               | Controller      | High                                         |
+| `src/controllers/useAuth.ts`              | Auth modes, Google initialization, reset-token validation, and auth requests                            | Controller      | High                                         |
+| `src/controllers/useAsyncStatus.ts`       | Shared busy/error runner semantics                                                                      | Controller      | Medium                                       |
+| `src/controllers/useNotifications.ts`     | Existing toast state and duration                                                                       | Controller      | Low                                          |
+| `src/controllers/types.ts`                | Frontend session, row, and view types                                                                   | Shared frontend | Low                                          |
+| `src/components/common.tsx`               | Label formatting, date conversion, fetch wrapper, basic field/select/multiselect                        | Shared          | Medium                                       |
+| `src/style.css`                           | Entire visual system, responsive layout, statuses, forms, modals, animation presentation                | Presentation    | Low, except selectors encode DOM assumptions |
 
 ### API client and validation
 
@@ -56,33 +65,33 @@ Local development runs Vite on port 5173 and Express on port 3001; Vite proxies 
 
 All endpoints are under `/api`. Routes after `api.use(requireUser)` require a valid session cookie.
 
-| Method/path | Auth | Request | Response / effect | Frontend caller |
-|---|---:|---|---|---|
-| `GET /auth/config` | No | none | `{googleClientId}` | `Auth` startup |
-| `GET /auth/session` | No | session cookie | `AuthUser` or 401 | `App` startup |
-| `POST /auth/register` | No | `{email,password,displayName?}` | 201 `AuthUser`, sets cookie, inserts user/session | `Auth.submit` |
-| `POST /auth/login` | No | `{email,password}` | `AuthUser`, sets cookie | `Auth.submit` |
-| `POST /auth/google` | No | `{credential}` | `AuthUser`, sets cookie, links/creates user | Google callback in `Auth` |
-| `POST /auth/logout` | No | cookie | `{ok:true}`, deletes session, clears cookie | `Settings` |
-| `POST /auth/forgot-password` | No | `{email}` | generic message; dev may include reset URL; inserts token and sends email | `Auth.requestReset` |
-| `POST /auth/validate-reset-token` | No | `{token}` | `{valid:boolean}` | `Auth` reset effect |
-| `POST /auth/reset-password` | No | `{token,password}` | message; updates password, consumes tokens, deletes sessions | `Auth.saveNewPassword` |
-| `GET /health` | No | none | `{ok:true}` after DB query | Render health check |
-| `POST /auth/account/password-reset` | Yes | none | generic reset result for session user's email | `Settings` |
-| `POST /auth/change-password` | Yes | `{currentPassword,newPassword}` | `{changed:true}`; updates hash and consumes unused reset tokens | `Settings` |
-| `DELETE /auth/account` | Yes | `{confirmation:'DELETE'}` | `{deleted:true}`; transactional account/data cleanup and cookie clear | `Settings` |
-| `POST /parse` | Yes | `{rawJd,originalUrl}` | complete unsaved `Job` review object | `Add` |
-| `GET /applications` | Yes | filter query | `{items,total,page,limit}` | `App` list and three stats calls |
-| `POST /applications` | Yes | `CreateApplication` | 201 full `Application`; transactional graph creation | `Add` |
-| `GET /applications/:id` | Yes | UUID path | full `Application` or 404 | `App.open` |
-| `PATCH /applications/:id` | Yes | `{notes?,appliedAt?}` | refreshed full `Application` or 404 | `Detail` |
-| `DELETE /applications/:id` | Yes | UUID path | `{deleted:true}` or 404 | `Detail` |
-| `POST /applications/:id/events` | Yes | `{type,occurredAt,notes}` | refreshed full `Application` or 404 | `Detail` |
-| `PATCH /applications/:id/events/:eventId` | Yes | same event shape | refreshed full `Application` or 404 | `Detail` |
-| `DELETE /applications/:id/events/:eventId` | Yes | UUIDs | refreshed full `Application` or 404 | `Detail` |
-| `GET /skills?limit=` | Yes | limit 1–500 | `{items:[name,type,applicationCount,minimumCount,preferredCount,otherCount]}` | No current UI caller |
-| `GET /roles` | Yes | none | `{items:[role,applicationCount]}` | No current UI caller |
-| `GET /analytics/overview` | Yes | period/from/to/company | totals and country/company/month/role breakdowns | No current UI caller |
+| Method/path                                | Auth | Request                         | Response / effect                                                             | Frontend caller                  |
+| ------------------------------------------ | ---: | ------------------------------- | ----------------------------------------------------------------------------- | -------------------------------- |
+| `GET /auth/config`                         |   No | none                            | `{googleClientId}`                                                            | `Auth` startup                   |
+| `GET /auth/session`                        |   No | session cookie                  | `AuthUser` or 401                                                             | `App` startup                    |
+| `POST /auth/register`                      |   No | `{email,password,displayName?}` | 201 `AuthUser`, sets cookie, inserts user/session                             | `Auth.submit`                    |
+| `POST /auth/login`                         |   No | `{email,password}`              | `AuthUser`, sets cookie                                                       | `Auth.submit`                    |
+| `POST /auth/google`                        |   No | `{credential}`                  | `AuthUser`, sets cookie, links/creates user                                   | Google callback in `Auth`        |
+| `POST /auth/logout`                        |   No | cookie                          | `{ok:true}`, deletes session, clears cookie                                   | `Settings`                       |
+| `POST /auth/forgot-password`               |   No | `{email}`                       | generic message; dev may include reset URL; inserts token and sends email     | `Auth.requestReset`              |
+| `POST /auth/validate-reset-token`          |   No | `{token}`                       | `{valid:boolean}`                                                             | `Auth` reset effect              |
+| `POST /auth/reset-password`                |   No | `{token,password}`              | message; updates password, consumes tokens, deletes sessions                  | `Auth.saveNewPassword`           |
+| `GET /health`                              |   No | none                            | `{ok:true}` after DB query                                                    | Render health check              |
+| `POST /auth/account/password-reset`        |  Yes | none                            | generic reset result for session user's email                                 | `Settings`                       |
+| `POST /auth/change-password`               |  Yes | `{currentPassword,newPassword}` | `{changed:true}`; updates hash and consumes unused reset tokens               | `Settings`                       |
+| `DELETE /auth/account`                     |  Yes | `{confirmation:'DELETE'}`       | `{deleted:true}`; transactional account/data cleanup and cookie clear         | `Settings`                       |
+| `POST /parse`                              |  Yes | `{rawJd,originalUrl}`           | complete unsaved `Job` review object                                          | `Add`                            |
+| `GET /applications`                        |  Yes | filter query                    | `{items,total,page,limit}`                                                    | `App` list and three stats calls |
+| `POST /applications`                       |  Yes | `CreateApplication`             | 201 full `Application`; transactional graph creation                          | `Add`                            |
+| `GET /applications/:id`                    |  Yes | UUID path                       | full `Application` or 404                                                     | `App.open`                       |
+| `PATCH /applications/:id`                  |  Yes | `{notes?,appliedAt?}`           | refreshed full `Application` or 404                                           | `Detail`                         |
+| `DELETE /applications/:id`                 |  Yes | UUID path                       | `{deleted:true}` or 404                                                       | `Detail`                         |
+| `POST /applications/:id/events`            |  Yes | `{type,occurredAt,notes}`       | refreshed full `Application` or 404                                           | `Detail`                         |
+| `PATCH /applications/:id/events/:eventId`  |  Yes | same event shape                | refreshed full `Application` or 404                                           | `Detail`                         |
+| `DELETE /applications/:id/events/:eventId` |  Yes | UUIDs                           | refreshed full `Application` or 404                                           | `Detail`                         |
+| `GET /skills?limit=`                       |  Yes | limit 1–500                     | `{items:[name,type,applicationCount,minimumCount,preferredCount,otherCount]}` | No current UI caller             |
+| `GET /roles`                               |  Yes | none                            | `{items:[role,applicationCount]}`                                             | No current UI caller             |
+| `GET /analytics/overview`                  |  Yes | period/from/to/company          | totals and country/company/month/role breakdowns                              | No current UI caller             |
 
 ### Server framework behavior
 
@@ -137,13 +146,13 @@ All endpoints are under `/api`. Routes after `api.use(requireUser)` require a va
 - Composition/order of existing information on list and detail screens.
 - Replacing informal CSS primitives with real presentational components.
 
-### Safe only after extracting behavior (medium/high risk)
+### Safe only when preserving controller contracts (medium/high risk)
 
-- List UI in `main.tsx`: presentation is intertwined with query state, debounce, stats, pagination, detail loading, revision refresh, and auth gating.
-- `Auth.tsx`: form presentation is intertwined with mode state, reset URL handling, Google script lifecycle, validation, and requests.
-- `Add.tsx`: the entire editable review model and parse/save boundary live inside rendered form code.
-- `Detail.tsx`: rendering is intertwined with application updates, timeline ordering/mutations, and deletion.
-- `Settings.tsx`: modals contain security-sensitive request and validation logic.
+- List UI in `main.tsx` consumes `useApplicationList`; redesign must preserve filter keys, pagination operations, loading/error behavior, and revision triggers.
+- `Auth.tsx` consumes `useAuth`; its Google button ref and reset-mode states are required integration points.
+- `Add.tsx` consumes `useAddApplication`; every field in its full mutable `Job` object must remain represented by future presentation.
+- `Detail.tsx` consumes `useApplicationDetail`; confirmations remain explicit presentation actions before destructive controller calls.
+- `Settings.tsx` consumes `useAccountSettings`; future modals must retain the controller's exact validation and close semantics.
 - `common.tsx`: form controls are presentational, but date conversion, query encoding, label normalization, and the API error contract are functional.
 
 Recommended V2 preparation is to extract hooks/controllers without changing their observable behavior, then rebuild presentational components against those stable interfaces.
@@ -179,14 +188,13 @@ Recommended V2 preparation is to extract hooks/controllers without changing thei
 
 ## 8. Surprising or important coupling
 
-1. `main.tsx` is simultaneously router, layout, controller, query layer, dashboard, notification system, and auth gate.
+1. `main.tsx` remains the in-memory navigator, layout, auth gate, selected-detail coordinator, and list renderer; query, notification, session, and async behavior have been extracted.
 2. Detail navigation has no URL and depends on a previously fetched object in memory.
-3. The Add form directly owns the entire mutable `Job` graph; replacing its markup can easily omit a persisted field.
+3. The add controller owns the entire mutable `Job` graph, but the presentation still renders each field explicitly; replacing it can still omit a persisted field.
 4. `busy` is global, so unrelated controls may appear busy/disabled during a request elsewhere.
-5. Toast timers are created ad hoc instead of through a notification service.
+5. Toast timing is centralized in `useNotifications`, while `App` still decides which completed actions produce a toast.
 6. Google button rendering depends on a DOM ref, a dynamically inserted global script, and stable callback lifecycle.
 7. Reset-password routing is a direct `window.location.pathname` check rather than router state.
 8. The UI's label/ordering helpers carry domain meaning, especially skill priority and date-to-ISO conversion.
 9. The three dashboard statistics do not use the analytics endpoint; they issue three application-list requests.
 10. Backend capabilities exceed current UI capabilities, while post-save structured job editing is absent from both API and UI.
-

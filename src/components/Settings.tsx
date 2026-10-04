@@ -1,8 +1,6 @@
-import { useEffect, useState } from 'react';
 import type { SessionUser } from './Auth';
-import { request, type Runner } from './common';
-
-const deleteConfirmation = 'DELETE';
+import type { Runner } from './common';
+import { deleteConfirmation, useAccountSettings } from '../controllers/useAccountSettings';
 
 export function Settings({
   user,
@@ -15,58 +13,34 @@ export function Settings({
   signedOut: () => void;
   passwordChanged: () => void;
 }) {
-  const [showDelete, setShowDelete] = useState(false);
-  const [showChangePassword, setShowChangePassword] = useState(false);
-  const [confirmation, setConfirmation] = useState('');
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [currentPasswordError, setCurrentPasswordError] = useState('');
-  const [passwordModalError, setPasswordModalError] = useState('');
-  const [passwordNotice, setPasswordNotice] = useState('');
-  const [developmentResetUrl, setDevelopmentResetUrl] = useState('');
-  const [passwordWorking, setPasswordWorking] = useState(false);
-
-  const closeDelete = () => {
-    setShowDelete(false);
-    setConfirmation('');
-  };
-
-  const closeChangePassword = () => {
-    setShowChangePassword(false);
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setCurrentPasswordError('');
-    setPasswordModalError('');
-    setPasswordNotice('');
-    setDevelopmentResetUrl('');
-  };
-
-  const openChangePassword = () => {
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setCurrentPasswordError('');
-    setPasswordModalError('');
-    setPasswordNotice('');
-    setDevelopmentResetUrl('');
-    setShowChangePassword(true);
-  };
-
-  useEffect(() => {
-    if (!showDelete && !showChangePassword) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      if (showDelete) closeDelete();
-      if (showChangePassword) closeChangePassword();
-    };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [showDelete, showChangePassword]);
-
-  const newPasswordInvalid = newPassword.length > 0 && newPassword.length < 5;
-  const passwordsDoNotMatch = confirmPassword.length > 0 && newPassword !== confirmPassword;
+  const settings = useAccountSettings({ run, signedOut, passwordChanged });
+  const {
+    showDelete,
+    openDelete,
+    closeDelete,
+    showChangePassword,
+    openChangePassword,
+    closeChangePassword,
+    confirmation,
+    setConfirmation,
+    currentPassword,
+    updateCurrentPassword,
+    newPassword,
+    setNewPassword,
+    confirmPassword,
+    setConfirmPassword,
+    currentPasswordError,
+    passwordModalError,
+    passwordNotice,
+    developmentResetUrl,
+    passwordWorking,
+    newPasswordInvalid,
+    passwordsDoNotMatch,
+    signOut,
+    sendPasswordReset,
+    changePassword,
+    deleteAccount,
+  } = settings;
 
   return (
     <>
@@ -90,15 +64,7 @@ export function Settings({
         </dl>
         <div className="account-actions">
           <button onClick={openChangePassword}>Change password</button>
-          <button
-            className="sign-out-button"
-            onClick={() =>
-              run(async () => {
-                await request('/auth/logout', 'POST');
-                signedOut();
-              })
-            }
-          >
+          <button className="sign-out-button" onClick={signOut}>
             Sign Out
           </button>
         </div>
@@ -137,9 +103,7 @@ export function Settings({
                   type="password"
                   value={currentPassword}
                   onChange={(event) => {
-                    setCurrentPassword(event.target.value);
-                    setCurrentPasswordError('');
-                    setPasswordModalError('');
+                    updateCurrentPassword(event.target.value);
                   }}
                   aria-invalid={Boolean(currentPasswordError)}
                   aria-describedby={currentPasswordError ? 'current-password-error' : undefined}
@@ -153,21 +117,7 @@ export function Settings({
               <button
                 className="password-reset-link"
                 disabled={passwordWorking}
-                onClick={() => {
-                  void run(async () => {
-                    setPasswordWorking(true);
-                    try {
-                      const result = await request<{
-                        message: string;
-                        developmentResetUrl?: string;
-                      }>('/auth/account/password-reset', 'POST');
-                      setPasswordNotice(result.message);
-                      setDevelopmentResetUrl(result.developmentResetUrl ?? '');
-                    } finally {
-                      setPasswordWorking(false);
-                    }
-                  });
-                }}
+                onClick={sendPasswordReset}
               >
                 Forgot your current password? Send a reset link
               </button>
@@ -212,37 +162,7 @@ export function Settings({
                   newPassword.length < 5 ||
                   newPassword !== confirmPassword
                 }
-                onClick={() => {
-                  void (async () => {
-                    setPasswordWorking(true);
-                    setCurrentPasswordError('');
-                    setPasswordModalError('');
-                    setPasswordNotice('');
-                    try {
-                      await request('/auth/change-password', 'POST', {
-                        currentPassword,
-                        newPassword,
-                      });
-                      setCurrentPassword('');
-                      setNewPassword('');
-                      setConfirmPassword('');
-                      closeChangePassword();
-                      passwordChanged();
-                    } catch (error) {
-                      const message =
-                        error instanceof Error ? error.message : 'Unable to change password';
-                      if (message === 'Current password is incorrect') {
-                        setCurrentPasswordError(
-                          'Current password does not match your existing password.',
-                        );
-                      } else {
-                        setPasswordModalError(message);
-                      }
-                    } finally {
-                      setPasswordWorking(false);
-                    }
-                  })();
-                }}
+                onClick={() => void changePassword()}
               >
                 {passwordWorking ? 'Please wait…' : 'Change password'}
               </button>
@@ -259,7 +179,7 @@ export function Settings({
               undone.
             </p>
           </div>
-          <button className="delete-account-outline" onClick={() => setShowDelete(true)}>
+          <button className="delete-account-outline" onClick={openDelete}>
             Delete account
           </button>
         </div>
@@ -295,13 +215,7 @@ export function Settings({
                 <button
                   className="delete-account-confirm-button"
                   disabled={confirmation !== deleteConfirmation}
-                  onClick={() => {
-                    if (confirmation !== deleteConfirmation) return;
-                    void run(async () => {
-                      await request('/auth/account', 'DELETE', { confirmation });
-                      signedOut();
-                    });
-                  }}
+                  onClick={deleteAccount}
                 >
                   Delete account
                 </button>

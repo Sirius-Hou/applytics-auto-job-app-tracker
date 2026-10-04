@@ -1,6 +1,6 @@
-import { useState } from 'react';
 import { statuses, type Application, type ApplicationEvent } from '../../shared/contracts';
-import { dayToIso, label, localDay, request, Field, Select, type Runner } from './common';
+import { dayToIso, label, localDay, Field, Select, type Runner } from './common';
+import { useApplicationDetail } from '../controllers/useApplicationDetail';
 
 const skillOrder = [
   'PROGRAMMING_LANGUAGE',
@@ -84,12 +84,25 @@ export function Detail({
   back: () => void;
   deleted: () => void;
 }) {
-  const [notes, setNotes] = useState(a.notes);
-  const [applied, setApplied] = useState(localDay(a.appliedAt));
-  const [type, setType] = useState('OA');
-  const [when, setWhen] = useState(localDay());
-  const [eventNotes, setEventNotes] = useState('');
-  const [editingEvent, setEditingEvent] = useState<ApplicationEvent | null>(null);
+  const {
+    notes,
+    setNotes,
+    applied,
+    setApplied,
+    eventType: type,
+    setEventType: setType,
+    eventDay: when,
+    setEventDay: setWhen,
+    eventNotes,
+    setEventNotes,
+    editingEvent,
+    setEditingEvent,
+    saveApplication,
+    removeApplication,
+    saveEvent,
+    removeEvent,
+    addEvent,
+  } = useApplicationDetail({ application: a, run, changed, deleted });
   return (
     <>
       <button onClick={back}>← All applications</button>
@@ -214,19 +227,7 @@ export function Detail({
               Notes
               <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
             </label>
-            <button
-              disabled={busy || !applied}
-              onClick={() =>
-                run(async () =>
-                  changed(
-                    await request<Application>('/applications/' + a.id, 'PATCH', {
-                      notes,
-                      appliedAt: dayToIso(applied),
-                    }),
-                  ),
-                )
-              }
-            >
+            <button disabled={busy || !applied} onClick={saveApplication}>
               Save changes
             </button>
             <p className="muted">
@@ -243,10 +244,7 @@ export function Detail({
               disabled={busy}
               onClick={() => {
                 if (!window.confirm('Delete this application and its complete history?')) return;
-                run(async () => {
-                  await request(`/applications/${a.id}`, 'DELETE');
-                  deleted();
-                });
+                void removeApplication();
               }}
             >
               Delete Application
@@ -290,26 +288,7 @@ export function Detail({
                       />
                     </label>
                     <div className="event-actions">
-                      <button
-                        className="primary"
-                        disabled={busy}
-                        onClick={() =>
-                          run(async () => {
-                            changed(
-                              await request<Application>(
-                                `/applications/${a.id}/events/${e.id}`,
-                                'PATCH',
-                                {
-                                  type: editingEvent.type,
-                                  occurredAt: editingEvent.occurredAt,
-                                  notes: editingEvent.notes,
-                                },
-                              ),
-                            );
-                            setEditingEvent(null);
-                          })
-                        }
-                      >
+                      <button className="primary" disabled={busy} onClick={() => saveEvent(e.id)}>
                         Save
                       </button>
                       <button onClick={() => setEditingEvent(null)}>Cancel</button>
@@ -337,14 +316,7 @@ export function Detail({
                         disabled={busy}
                         onClick={() => {
                           if (!window.confirm('Delete this timeline event?')) return;
-                          run(async () =>
-                            changed(
-                              await request<Application>(
-                                `/applications/${a.id}/events/${e.id}`,
-                                'DELETE',
-                              ),
-                            ),
-                          );
+                          void removeEvent(e.id);
                         }}
                       >
                         <ActionIcon kind="delete" />
@@ -365,22 +337,7 @@ export function Detail({
                   Notes
                   <textarea value={eventNotes} onChange={(e) => setEventNotes(e.target.value)} />
                 </label>
-                <button
-                  className="primary"
-                  disabled={busy || !when}
-                  onClick={() =>
-                    run(async () => {
-                      changed(
-                        await request<Application>('/applications/' + a.id + '/events', 'POST', {
-                          type,
-                          occurredAt: dayToIso(when),
-                          notes: eventNotes,
-                        }),
-                      );
-                      setEventNotes('');
-                    })
-                  }
-                >
+                <button className="primary" disabled={busy || !when} onClick={addEvent}>
                   Save Status Update
                 </button>
                 <p className="muted">The latest update by date sets the current status.</p>
