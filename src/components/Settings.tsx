@@ -8,10 +8,12 @@ export function Settings({
   user,
   run,
   signedOut,
+  passwordChanged,
 }: {
   user: SessionUser;
   run: Runner;
   signedOut: () => void;
+  passwordChanged: () => void;
 }) {
   const [showDelete, setShowDelete] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -224,7 +226,8 @@ export function Settings({
                       setCurrentPassword('');
                       setNewPassword('');
                       setConfirmPassword('');
-                      setPasswordNotice('Your password has been changed.');
+                      closeChangePassword();
+                      passwordChanged();
                     } catch (error) {
                       const message =
                         error instanceof Error ? error.message : 'Unable to change password';

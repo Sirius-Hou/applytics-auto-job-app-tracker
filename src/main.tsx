@@ -506,6 +506,10 @@ function App() {
           <Settings
             user={user}
             run={run}
+            passwordChanged={() => {
+              setToast('Password changed successfully.');
+              window.setTimeout(() => setToast(''), 3500);
+            }}
             signedOut={() => {
               setDetail(null);
               setView('list');
