@@ -22,8 +22,13 @@ export function Auth({
   const [displayName, setDisplayName] = useState('');
   const [notice, setNotice] = useState('');
   const [developmentResetUrl, setDevelopmentResetUrl] = useState('');
+  const [resetTokenStatus, setResetTokenStatus] = useState<'checking' | 'valid' | 'invalid'>(
+    mode === 'reset' ? 'checking' : 'valid',
+  );
   const [googleEnabled, setGoogleEnabled] = useState<boolean | null>(null);
   const googleButton = useRef<HTMLDivElement>(null);
+  const registrationPasswordInvalid =
+    mode === 'register' && password.length > 0 && password.length < 5;
 
   useEffect(() => {
     let cancelled = false;
@@ -43,7 +48,7 @@ export function Auth({
           theme: 'outline',
           size: 'large',
           width: 360,
-          text: 'continue_with',
+          text: 'signin_with',
         });
       };
       if ((window as typeof window & { google?: any }).google) return start();
@@ -57,6 +62,25 @@ export function Auth({
       cancelled = true;
     };
   }, [run, signedIn]);
+
+  useEffect(() => {
+    if (mode !== 'reset') return;
+    if (!resetToken) {
+      setResetTokenStatus('invalid');
+      return;
+    }
+    let cancelled = false;
+    request<{ valid: boolean }>('/auth/validate-reset-token', 'POST', { token: resetToken })
+      .then(({ valid }) => {
+        if (!cancelled) setResetTokenStatus(valid ? 'valid' : 'invalid');
+      })
+      .catch(() => {
+        if (!cancelled) setResetTokenStatus('invalid');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, resetToken]);
 
   const submit = () =>
     run(async () => {
@@ -103,9 +127,18 @@ export function Auth({
     setMode('login');
   };
 
+  const requestAnotherReset = () => {
+    window.history.replaceState({}, '', '/');
+    setNotice('');
+    setDevelopmentResetUrl('');
+    setPassword('');
+    setConfirmPassword('');
+    setMode('forgot');
+  };
+
   const title =
     mode === 'login'
-      ? 'Welcome back'
+      ? 'Sign in to your account'
       : mode === 'register'
         ? 'Create your account'
         : mode === 'forgot'
@@ -115,8 +148,41 @@ export function Auth({
     mode === 'forgot'
       ? 'Enter your account email and we will send you a secure reset link.'
       : mode === 'reset'
-        ? 'Use at least 10 characters. This reset link can only be used once.'
+        ? 'Use at least 5 characters. This reset link can only be used once.'
         : 'Keep your applications and job data in your private workspace.';
+
+  if (mode === 'reset' && resetTokenStatus !== 'valid') {
+    return (
+      <main className="auth-page">
+        <section className="auth-card">
+          <div className="auth-brand">
+            <span className="logo">a.</span>
+            <strong>applytics</strong>
+          </div>
+          {resetTokenStatus === 'checking' ? (
+            <>
+              <h1>Checking reset link…</h1>
+              <p>Please wait while we verify this password reset link.</p>
+            </>
+          ) : (
+            <>
+              <div role="alert" className="invalid-reset-alert">
+                This password reset link is invalid or has expired.
+              </div>
+              <h1>Request a new link</h1>
+              <p>Password reset links expire after 30 minutes and can only be used once.</p>
+              <button className="primary auth-submit" onClick={requestAnotherReset}>
+                Send a New Reset Link
+              </button>
+              <button className="auth-text-button" onClick={returnToSignIn}>
+                Back to Sign In
+              </button>
+            </>
+          )}
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="auth-page">
@@ -174,7 +240,7 @@ export function Auth({
             />
             <button
               className="primary auth-submit"
-              disabled={busy || !resetToken || password.length < 10 || password !== confirmPassword}
+              disabled={busy || !resetToken || password.length < 5 || password !== confirmPassword}
               onClick={saveNewPassword}
             >
               {busy ? 'Saving…' : 'Reset Password'}
@@ -186,7 +252,27 @@ export function Auth({
         ) : (
           <>
             <Field name="Email" type="email" value={email} onChange={setEmail} />
-            <Field name="Password" type="password" value={password} onChange={setPassword} />
+            {mode === 'register' ? (
+              <label className={registrationPasswordInvalid ? 'auth-field-invalid' : ''}>
+                Password
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  aria-invalid={registrationPasswordInvalid}
+                  aria-describedby={
+                    registrationPasswordInvalid ? 'registration-password-error' : undefined
+                  }
+                />
+                {registrationPasswordInvalid && (
+                  <span id="registration-password-error" className="auth-field-error" role="alert">
+                    Password must contain at least 5 characters.
+                  </span>
+                )}
+              </label>
+            ) : (
+              <Field name="Password" type="password" value={password} onChange={setPassword} />
+            )}
             {mode === 'login' && (
               <button className="forgot-password-link" onClick={() => setMode('forgot')}>
                 Forgot password?
@@ -194,7 +280,7 @@ export function Auth({
             )}
             <button
               className="primary auth-submit"
-              disabled={busy || !email || password.length < 10}
+              disabled={busy || !email || !password || (mode === 'register' && password.length < 5)}
               onClick={submit}
             >
               {busy ? 'Please wait…' : mode === 'login' ? 'Sign In' : 'Create Account'}
@@ -204,12 +290,11 @@ export function Auth({
             </div>
             {googleEnabled === false ? (
               <button className="google-placeholder" disabled>
-                Continue with Google · Setup required
+                Sign in with Google · Setup required
               </button>
             ) : (
               <div ref={googleButton} className="google-button" />
             )}
-            <small>Password must contain at least 10 characters.</small>
           </>
         )}
       </section>

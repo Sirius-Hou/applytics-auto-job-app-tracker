@@ -17,15 +17,26 @@ const cookieName = 'applytics_session';
 const sessionDays = 30;
 const credentialsSchema = z.object({
   email: z.string().trim().toLowerCase().email().max(320),
-  password: z.string().min(10).max(200),
+  password: z.string().min(5).max(200),
   displayName: z.string().trim().max(100).optional(),
+});
+const loginSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(320),
+  password: z.string().min(1).max(200),
+});
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(200),
+  newPassword: z.string().min(5).max(200),
 });
 const forgotPasswordSchema = z.object({
   email: z.string().trim().toLowerCase().email().max(320),
 });
 const resetPasswordSchema = z.object({
   token: z.string().min(32).max(300),
-  password: z.string().min(10).max(200),
+  password: z.string().min(5).max(200),
+});
+const deleteAccountSchema = z.object({
+  confirmation: z.literal('DELETE'),
 });
 
 const resetWindowMs = 15 * 60 * 1000;
@@ -162,7 +173,7 @@ export async function registerWithPassword(input: unknown, res: Response) {
 }
 
 export async function loginWithPassword(input: unknown, res: Response) {
-  const value = credentialsSchema.pick({ email: true, password: true }).parse(input);
+  const value = loginSchema.parse(input);
   const { rows } = await pool.query(
     'SELECT id,email,password_hash,display_name AS "displayName" FROM users WHERE email=$1',
     [value.email],
@@ -175,6 +186,35 @@ export async function loginWithPassword(input: unknown, res: Response) {
     { id: record.id, email: record.email, displayName: record.displayName },
     res,
   );
+}
+
+export async function changePassword(userId: string, input: unknown) {
+  const value = changePasswordSchema.parse(input);
+  return transaction(async (client) => {
+    const { rows } = await client.query<{ password_hash: string | null }>(
+      'SELECT password_hash FROM users WHERE id=$1 FOR UPDATE',
+      [userId],
+    );
+    const currentHash = rows[0]?.password_hash;
+    if (!currentHash) {
+      throw Object.assign(
+        new Error('This account does not have a password. Use the email reset option instead.'),
+        { status: 400 },
+      );
+    }
+    if (!(await verifyPassword(value.currentPassword, currentHash))) {
+      throw Object.assign(new Error('Current password is incorrect'), { status: 401 });
+    }
+    await client.query('UPDATE users SET password_hash=$1 WHERE id=$2', [
+      await hashPassword(value.newPassword),
+      userId,
+    ]);
+    await client.query(
+      'UPDATE password_reset_tokens SET used_at=now() WHERE user_id=$1 AND used_at IS NULL',
+      [userId],
+    );
+    return { changed: true };
+  });
 }
 
 export async function requestPasswordReset(
@@ -250,6 +290,16 @@ export async function resetPassword(input: unknown) {
   });
 }
 
+export async function validatePasswordResetToken(input: unknown) {
+  const { token } = resetPasswordSchema.pick({ token: true }).parse(input);
+  const { rowCount } = await pool.query(
+    `SELECT 1 FROM password_reset_tokens
+     WHERE token_hash=$1 AND used_at IS NULL AND expires_at>now()`,
+    [tokenHash(token)],
+  );
+  return { valid: Boolean(rowCount) };
+}
+
 export async function loginWithGoogle(input: unknown, res: Response) {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId) throw Object.assign(new Error('Google login is not configured'), { status: 503 });
@@ -296,6 +346,67 @@ export async function logout(req: Request, res: Response) {
   const token = parseCookies(req)[cookieName];
   if (token) await pool.query('DELETE FROM auth_sessions WHERE token_hash=$1', [tokenHash(token)]);
   clearSessionCookie(res);
+}
+
+export async function deleteAccount(userId: string, input: unknown, res: Response) {
+  deleteAccountSchema.parse(input);
+
+  await transaction(async (client) => {
+    const user = await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE', [userId]);
+    if (!user.rowCount) {
+      throw Object.assign(new Error('Account not found'), { status: 404 });
+    }
+
+    const { rows: ownedJobs } = await client.query<{ id: string; company_id: string | null }>(
+      `SELECT DISTINCT j.id,j.company_id
+       FROM applications a JOIN jobs j ON j.id=a.job_id
+       WHERE a.user_id=$1`,
+      [userId],
+    );
+    const jobIds = ownedJobs.map((job) => job.id);
+    const companyIds = ownedJobs
+      .map((job) => job.company_id)
+      .filter((companyId): companyId is string => Boolean(companyId));
+    const skillIds = jobIds.length
+      ? (
+          await client.query<{ skill_id: string }>(
+            'SELECT DISTINCT skill_id FROM job_skills WHERE job_id=ANY($1::uuid[])',
+            [jobIds],
+          )
+        ).rows.map((skill) => skill.skill_id)
+      : [];
+
+    // Cascades remove this user's applications, events, sessions, and reset tokens.
+    await client.query('DELETE FROM users WHERE id=$1', [userId]);
+
+    if (jobIds.length) {
+      await client.query(
+        `DELETE FROM jobs j
+         WHERE j.id=ANY($1::uuid[])
+           AND NOT EXISTS (SELECT 1 FROM applications a WHERE a.job_id=j.id)`,
+        [jobIds],
+      );
+    }
+    if (companyIds.length) {
+      await client.query(
+        `DELETE FROM companies c
+         WHERE c.id=ANY($1::uuid[])
+           AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.company_id=c.id)`,
+        [companyIds],
+      );
+    }
+    if (skillIds.length) {
+      await client.query(
+        `DELETE FROM skills s
+         WHERE s.id=ANY($1::uuid[])
+           AND NOT EXISTS (SELECT 1 FROM job_skills js WHERE js.skill_id=s.id)`,
+        [skillIds],
+      );
+    }
+  });
+
+  clearSessionCookie(res);
+  return { deleted: true };
 }
 
 export const googleClientId = () => process.env.GOOGLE_CLIENT_ID ?? null;

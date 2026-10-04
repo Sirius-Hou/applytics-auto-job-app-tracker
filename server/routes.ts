@@ -12,7 +12,9 @@ import { parseJobDescription } from './ai/job-parser/agent.js';
 import * as applications from './repositories/applications.js';
 import { pool } from './db/pool.js';
 import {
+  changePassword,
   currentUser,
+  deleteAccount,
   googleClientId,
   loginWithGoogle,
   loginWithPassword,
@@ -20,6 +22,7 @@ import {
   registerWithPassword,
   requestPasswordReset,
   resetPassword,
+  validatePasswordResetToken,
   requireUser,
   type AuthUser,
 } from './auth.js';
@@ -59,6 +62,10 @@ api.post(
   route(async (req, res) => res.json(await resetPassword(req.body))),
 );
 api.post(
+  '/auth/validate-reset-token',
+  route(async (req, res) => res.json(await validatePasswordResetToken(req.body))),
+);
+api.post(
   '/auth/google',
   route(async (req, res) => res.json(await loginWithGoogle(req.body, res))),
 );
@@ -77,6 +84,24 @@ api.get(
   }),
 );
 api.use(requireUser);
+api.post(
+  '/auth/account/password-reset',
+  route(async (req, res) => {
+    const requestBaseUrl = `${req.protocol}://${req.get('host')}`;
+    const user = res.locals.user as AuthUser;
+    res.json(
+      await requestPasswordReset({ email: user.email }, requestBaseUrl, req.ip || 'unknown'),
+    );
+  }),
+);
+api.post(
+  '/auth/change-password',
+  route(async (req, res) => res.json(await changePassword(userId(res), req.body))),
+);
+api.delete(
+  '/auth/account',
+  route(async (req, res) => res.json(await deleteAccount(userId(res), req.body, res))),
+);
 api.post(
   '/parse',
   route(async (req, res) => {

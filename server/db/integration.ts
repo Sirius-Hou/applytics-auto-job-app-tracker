@@ -236,6 +236,80 @@ try {
   assert.equal(registration.status, 201);
   const cookie = registration.headers.get('set-cookie')!.split(';')[0];
   const authHeaders = { 'Content-Type': 'application/json', Cookie: cookie };
+  assert.equal(
+    (
+      await fetch(root + '/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'api@example.com', password: 'x' }),
+      })
+    ).status,
+    401,
+  );
+  assert.equal(
+    (
+      await fetch(root + '/auth/change-password', {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({
+          currentPassword: 'wrong-password',
+          newPassword: 'changed-password',
+        }),
+      })
+    ).status,
+    401,
+  );
+  assert.equal(
+    (
+      await fetch(root + '/auth/change-password', {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({
+          currentPassword: 'a-secure-test-password',
+          newPassword: 'tiny',
+        }),
+      })
+    ).status,
+    400,
+  );
+  const changePasswordResponse = await fetch(root + '/auth/change-password', {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({
+      currentPassword: 'a-secure-test-password',
+      newPassword: 'changed-password',
+    }),
+  });
+  assert.equal(changePasswordResponse.status, 200);
+  assert.deepEqual(await changePasswordResponse.json(), { changed: true });
+  assert.equal(
+    (
+      await fetch(root + '/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'api@example.com', password: 'a-secure-test-password' }),
+      })
+    ).status,
+    401,
+  );
+  assert.equal(
+    (
+      await fetch(root + '/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'api@example.com', password: 'changed-password' }),
+      })
+    ).status,
+    200,
+  );
+  const accountResetResponse = await fetch(root + '/auth/account/password-reset', {
+    method: 'POST',
+    headers: authHeaders,
+  });
+  assert.equal(accountResetResponse.status, 200);
+  assert.ok(
+    ((await accountResetResponse.json()) as { developmentResetUrl?: string }).developmentResetUrl,
+  );
   assert.equal((await fetch(root + '/applications/' + a.id, { headers: authHeaders })).status, 404);
   assert.equal(
     (await fetch(root + '/applications/not-a-uuid', { headers: authHeaders })).status,
@@ -302,10 +376,20 @@ try {
   assert.match(forgot.message, /If an account uses that email/);
   const resetToken = new URL(forgot.developmentResetUrl).searchParams.get('token');
   assert.ok(resetToken);
+  assert.deepEqual(
+    await (
+      await fetch(root + '/auth/validate-reset-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: resetToken }),
+      })
+    ).json(),
+    { valid: true },
+  );
   const resetResponse = await fetch(root + '/auth/reset-password', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: resetToken, password: 'a-new-secure-test-password' }),
+    body: JSON.stringify({ token: resetToken, password: 'abcde' }),
   });
   assert.equal(resetResponse.status, 200);
   assert.equal((await fetch(root + '/auth/session', { headers: { Cookie: cookie } })).status, 401);
@@ -326,7 +410,7 @@ try {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: 'api@example.com',
-          password: 'a-new-secure-test-password',
+          password: 'abcde',
         }),
       })
     ).status,
@@ -342,6 +426,16 @@ try {
     ).status,
     400,
   );
+  assert.deepEqual(
+    await (
+      await fetch(root + '/auth/validate-reset-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: resetToken }),
+      })
+    ).json(),
+    { valid: false },
+  );
   const unknownForgot = await fetch(root + '/auth/forgot-password', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -354,8 +448,84 @@ try {
   };
   assert.equal(unknownForgotBody.message, forgot.message);
   assert.equal(unknownForgotBody.developmentResetUrl, undefined);
+
+  const preservedApplicationCount = (
+    await pool.query('SELECT count(*) FROM applications WHERE user_id=$1', [userId])
+  ).rows[0].count;
+  const deleteRegistration = await fetch(root + '/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'delete-me@example.com', password: 'abcde' }),
+  });
+  assert.equal(deleteRegistration.status, 201);
+  const deleteUser = (await deleteRegistration.json()) as { id: string };
+  const deleteCookie = deleteRegistration.headers.get('set-cookie')!.split(';')[0];
+  const deleteHeaders = { 'Content-Type': 'application/json', Cookie: deleteCookie };
+  const deleteInput = {
+    ...input,
+    job: {
+      ...input.job,
+      company: 'Delete Account Test Company',
+      title: 'Delete Account Test Role',
+      originalUrl: 'https://example.com/delete-account-test',
+    },
+  };
+  const deleteApplicationResponse = await fetch(root + '/applications', {
+    method: 'POST',
+    headers: deleteHeaders,
+    body: JSON.stringify(deleteInput),
+  });
+  assert.equal(deleteApplicationResponse.status, 201);
+  const deleteApplication = (await deleteApplicationResponse.json()) as {
+    id: string;
+    job: { id: string };
+  };
+  assert.equal(
+    (
+      await fetch(root + '/auth/account', {
+        method: 'DELETE',
+        headers: deleteHeaders,
+        body: JSON.stringify({ confirmation: 'delete' }),
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (await pool.query('SELECT count(*) FROM users WHERE id=$1', [deleteUser.id])).rows[0].count,
+    '1',
+  );
+  const deleteResponse = await fetch(root + '/auth/account', {
+    method: 'DELETE',
+    headers: deleteHeaders,
+    body: JSON.stringify({ confirmation: 'DELETE' }),
+  });
+  assert.equal(deleteResponse.status, 200);
+  assert.deepEqual(await deleteResponse.json(), { deleted: true });
+  assert.equal(
+    (await fetch(root + '/auth/session', { headers: { Cookie: deleteCookie } })).status,
+    401,
+  );
+  assert.equal(
+    (await pool.query('SELECT count(*) FROM users WHERE id=$1', [deleteUser.id])).rows[0].count,
+    '0',
+  );
+  assert.equal(
+    (await pool.query('SELECT count(*) FROM applications WHERE id=$1', [deleteApplication.id]))
+      .rows[0].count,
+    '0',
+  );
+  assert.equal(
+    (await pool.query('SELECT count(*) FROM jobs WHERE id=$1', [deleteApplication.job.id])).rows[0]
+      .count,
+    '0',
+  );
+  assert.equal(
+    (await pool.query('SELECT count(*) FROM applications WHERE user_id=$1', [userId])).rows[0]
+      .count,
+    preservedApplicationCount,
+  );
   console.log(
-    'PASS: PostgreSQL migrations, persistence, filters, history, auth, password recovery and REST validation.',
+    'PASS: PostgreSQL migrations, persistence, filters, history, auth, password changes, password recovery, account deletion and REST validation.',
   );
 } finally {
   if (server)

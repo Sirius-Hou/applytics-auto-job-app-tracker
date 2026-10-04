@@ -6,6 +6,8 @@ export async function sendPasswordResetEmail(
   recipient: string,
   resetUrl: string,
 ): Promise<EmailDelivery> {
+  if (process.env.NODE_ENV === 'test') return 'development';
+
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM;
 
