@@ -23,3 +23,9 @@ services:
         value: 60000
       - key: GOOGLE_CLIENT_ID
         sync: false
+      - key: APP_BASE_URL
+        value: https://applytics.siriushou.com
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false

@@ -3,6 +3,7 @@ import { ZodError } from 'zod';
 import { resolve } from 'node:path';
 import { api } from './routes.js';
 export const app = express();
+app.set('trust proxy', 1);
 // Local app: deny cross-origin writes, including simple form requests.
 app.use((req, res, next) => {
   const origin = req.get('origin');

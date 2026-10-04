@@ -10,6 +10,7 @@ import type { Request, RequestHandler, Response } from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import { z } from 'zod';
 import { pool, transaction } from './db/pool.js';
+import { sendPasswordResetEmail } from './email.js';
 
 const scrypt = promisify(scryptCallback);
 const cookieName = 'applytics_session';
@@ -19,6 +20,20 @@ const credentialsSchema = z.object({
   password: z.string().min(10).max(200),
   displayName: z.string().trim().max(100).optional(),
 });
+const forgotPasswordSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(320),
+});
+const resetPasswordSchema = z.object({
+  token: z.string().min(32).max(300),
+  password: z.string().min(10).max(200),
+});
+
+const resetWindowMs = 15 * 60 * 1000;
+const resetAttempts = new Map<string, number[]>();
+const resetLimit = (productionLimit: number) =>
+  process.env.NODE_ENV === 'production' ? productionLimit : 100;
+const genericResetMessage =
+  'If an account uses that email, a password reset link will be sent shortly.';
 
 export type AuthUser = { id: string; email: string; displayName: string | null };
 
@@ -36,6 +51,28 @@ async function verifyPassword(password: string, encoded: string) {
   const expected = Buffer.from(expectedHex, 'hex');
   const actual = (await scrypt(password, salt, expected.length)) as Buffer;
   return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+function enforceResetRateLimit(key: string, maximum: number) {
+  const now = Date.now();
+  const recent = (resetAttempts.get(key) ?? []).filter((time) => now - time < resetWindowMs);
+  if (recent.length >= maximum) {
+    throw Object.assign(new Error('Too many password reset requests. Try again later.'), {
+      status: 429,
+    });
+  }
+  recent.push(now);
+  resetAttempts.set(key, recent);
+}
+
+function passwordResetBaseUrl(requestBaseUrl: string) {
+  const configured = process.env.APP_BASE_URL?.trim();
+  const value = configured || requestBaseUrl;
+  const url = new URL(value);
+  if (process.env.NODE_ENV === 'production' && (url.protocol !== 'https:' || !configured)) {
+    throw new Error('APP_BASE_URL must be configured with an HTTPS URL in production');
+  }
+  return url.origin;
 }
 
 function parseCookies(req: Request) {
@@ -138,6 +175,79 @@ export async function loginWithPassword(input: unknown, res: Response) {
     { id: record.id, email: record.email, displayName: record.displayName },
     res,
   );
+}
+
+export async function requestPasswordReset(
+  input: unknown,
+  requestBaseUrl: string,
+  requestIp: string,
+) {
+  const value = forgotPasswordSchema.parse(input);
+  enforceResetRateLimit(`ip:${requestIp}`, resetLimit(5));
+  enforceResetRateLimit(`email:${value.email}`, resetLimit(3));
+
+  const { rows } = await pool.query('SELECT id,email FROM users WHERE email=$1', [value.email]);
+  const user = rows[0] as { id: string; email: string } | undefined;
+  if (!user) return { message: genericResetMessage };
+
+  const token = randomBytes(32).toString('base64url');
+  const hash = tokenHash(token);
+  const tokenId = randomUUID();
+  await transaction(async (client) => {
+    await client.query(
+      `UPDATE password_reset_tokens SET used_at=now()
+       WHERE user_id=$1 AND used_at IS NULL`,
+      [user.id],
+    );
+    await client.query(
+      `INSERT INTO password_reset_tokens(id,user_id,token_hash,expires_at)
+       VALUES($1,$2,$3,now() + interval '30 minutes')`,
+      [tokenId, user.id, hash],
+    );
+  });
+
+  const resetUrl = `${passwordResetBaseUrl(requestBaseUrl)}/reset-password?token=${encodeURIComponent(token)}`;
+  try {
+    const delivery = await sendPasswordResetEmail(user.email, resetUrl);
+    return {
+      message: genericResetMessage,
+      ...(delivery === 'development' ? { developmentResetUrl: resetUrl } : {}),
+    };
+  } catch (error) {
+    await pool.query('DELETE FROM password_reset_tokens WHERE id=$1', [tokenId]);
+    console.error('Unable to send password reset email:', error);
+    return { message: genericResetMessage };
+  }
+}
+
+export async function resetPassword(input: unknown) {
+  const value = resetPasswordSchema.parse(input);
+  const hash = tokenHash(value.token);
+  return transaction(async (client) => {
+    const { rows } = await client.query(
+      `SELECT id,user_id FROM password_reset_tokens
+       WHERE token_hash=$1 AND used_at IS NULL AND expires_at>now()
+       FOR UPDATE`,
+      [hash],
+    );
+    const reset = rows[0] as { id: string; user_id: string } | undefined;
+    if (!reset) {
+      throw Object.assign(new Error('This password reset link is invalid or has expired.'), {
+        status: 400,
+      });
+    }
+
+    await client.query('UPDATE users SET password_hash=$1 WHERE id=$2', [
+      await hashPassword(value.password),
+      reset.user_id,
+    ]);
+    await client.query(
+      'UPDATE password_reset_tokens SET used_at=now() WHERE user_id=$1 AND used_at IS NULL',
+      [reset.user_id],
+    );
+    await client.query('DELETE FROM auth_sessions WHERE user_id=$1', [reset.user_id]);
+    return { message: 'Your password has been reset. Sign in with your new password.' };
+  });
 }
 
 export async function loginWithGoogle(input: unknown, res: Response) {

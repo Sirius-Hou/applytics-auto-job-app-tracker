@@ -18,6 +18,8 @@ await pg.initialise();
 await pg.start();
 await pg.createDatabase('tracker_test');
 process.env.DATABASE_URL = `postgresql://testuser:${password}@127.0.0.1:55433/tracker_test`;
+process.env.NODE_ENV = 'test';
+process.env.APP_BASE_URL = 'http://127.0.0.1:5173';
 const { migrate } = await import('./migrate.js');
 const { pool } = await import('./pool.js');
 const repo = await import('../repositories/applications.js');
@@ -26,7 +28,7 @@ let server: ReturnType<(typeof import('../app.js'))['app']['listen']> | undefine
 try {
   await migrate();
   await migrate();
-  assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count, '6');
+  assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count, '7');
   const userId = randomUUID();
   await pool.query('INSERT INTO users(id,email,password_hash) VALUES($1,$2,$3)', [
     userId,
@@ -287,11 +289,80 @@ try {
     (await fetch(root + '/applications/' + savedData.id, { headers: authHeaders })).status,
     404,
   );
+  const forgotResponse = await fetch(root + '/auth/forgot-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'api@example.com' }),
+  });
+  assert.equal(forgotResponse.status, 200);
+  const forgot = (await forgotResponse.json()) as {
+    message: string;
+    developmentResetUrl: string;
+  };
+  assert.match(forgot.message, /If an account uses that email/);
+  const resetToken = new URL(forgot.developmentResetUrl).searchParams.get('token');
+  assert.ok(resetToken);
+  const resetResponse = await fetch(root + '/auth/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: resetToken, password: 'a-new-secure-test-password' }),
+  });
+  assert.equal(resetResponse.status, 200);
+  assert.equal((await fetch(root + '/auth/session', { headers: { Cookie: cookie } })).status, 401);
+  assert.equal(
+    (
+      await fetch(root + '/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'api@example.com', password: 'a-secure-test-password' }),
+      })
+    ).status,
+    401,
+  );
+  assert.equal(
+    (
+      await fetch(root + '/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: 'api@example.com',
+          password: 'a-new-secure-test-password',
+        }),
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await fetch(root + '/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: resetToken, password: 'another-secure-password' }),
+      })
+    ).status,
+    400,
+  );
+  const unknownForgot = await fetch(root + '/auth/forgot-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'missing@example.com' }),
+  });
+  assert.equal(unknownForgot.status, 200);
+  const unknownForgotBody = (await unknownForgot.json()) as {
+    message: string;
+    developmentResetUrl?: string;
+  };
+  assert.equal(unknownForgotBody.message, forgot.message);
+  assert.equal(unknownForgotBody.developmentResetUrl, undefined);
   console.log(
-    'PASS: real PostgreSQL migrations, persistence, filters, history, concurrency, rollback, normalization and REST validation.',
+    'PASS: PostgreSQL migrations, persistence, filters, history, auth, password recovery and REST validation.',
   );
 } finally {
-  if (server) await new Promise<void>((r, j) => server!.close((e) => (e ? j(e) : r())));
+  if (server)
+    await new Promise<void>((resolveClose, rejectClose) => {
+      server!.close((error) => (error ? rejectClose(error) : resolveClose()));
+      server!.closeAllConnections();
+    });
   await pool.end();
   await pg.stop();
 }

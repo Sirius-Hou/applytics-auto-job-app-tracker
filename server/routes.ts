@@ -18,6 +18,8 @@ import {
   loginWithPassword,
   logout,
   registerWithPassword,
+  requestPasswordReset,
+  resetPassword,
   requireUser,
   type AuthUser,
 } from './auth.js';
@@ -44,6 +46,17 @@ api.post(
 api.post(
   '/auth/login',
   route(async (req, res) => res.json(await loginWithPassword(req.body, res))),
+);
+api.post(
+  '/auth/forgot-password',
+  route(async (req, res) => {
+    const requestBaseUrl = `${req.protocol}://${req.get('host')}`;
+    res.json(await requestPasswordReset(req.body, requestBaseUrl, req.ip || 'unknown'));
+  }),
+);
+api.post(
+  '/auth/reset-password',
+  route(async (req, res) => res.json(await resetPassword(req.body))),
 );
 api.post(
   '/auth/google',

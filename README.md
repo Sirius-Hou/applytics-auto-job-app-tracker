@@ -52,6 +52,9 @@ DATABASE_URL=postgresql://user:password@host:5432/job_tracker
 PORT=3001
 HOST=127.0.0.1
 GOOGLE_CLIENT_ID=optional-web-client-id.apps.googleusercontent.com
+APP_BASE_URL=https://applytics.siriushou.com
+RESEND_API_KEY=re_your_resend_api_key
+EMAIL_FROM=Applytics <no-reply@mail.siriushou.com>
 ```
 
 OpenAI settings belong in `.env.openai` locally, or in ordinary server environment variables when deployed:
@@ -74,6 +77,8 @@ https://applytics.siriushou.com
 ```
 
 Email/password login works without Google configuration. Passwords are stored as salted scrypt hashes. Sessions use HTTP-only, SameSite cookies and become Secure in production.
+
+Password recovery uses single-use, SHA-256-hashed reset tokens that expire after 30 minutes. Production email delivery uses Resend. Verify the sending domain in Resend, keep `RESEND_API_KEY` in Render environment variables, and set `EMAIL_FROM` to an address on that verified domain. In local development without Resend credentials, the UI provides a local-only reset link for testing; production never exposes this link in an API response.
 
 ## Commands
 

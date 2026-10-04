@@ -129,6 +129,18 @@ function App() {
     { label: 'PAST MONTH', value: stats.month, detail: 'Added within 30 days' },
     { label: 'PAST YEAR', value: stats.year, detail: 'Added within 12 months' },
   ];
+  const isPasswordResetPage = window.location.pathname === '/reset-password';
+  if (isPasswordResetPage)
+    return (
+      <>
+        {error && (
+          <div role="alert" className="error auth-error">
+            {error}
+          </div>
+        )}
+        <Auth busy={busy} run={run} signedIn={setUser} />
+      </>
+    );
   if (user === undefined) return <div className="auth-loading">Loading Applytics…</div>;
   if (!user)
     return (
