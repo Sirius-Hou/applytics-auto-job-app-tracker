@@ -161,7 +161,7 @@ function App() {
           className={view === 'list' || view === 'detail' ? 'nav active' : 'nav'}
           onClick={() => setView('list')}
         >
-          ▤ <span>My Applications</span>
+          ▤ <span>My Applications TEST</span>
         </button>
         <button
           className={view === 'add' ? 'nav active' : 'nav'}

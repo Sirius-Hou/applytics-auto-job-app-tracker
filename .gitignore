@@ -3,7 +3,9 @@ dist/
 .env
 .env.openai
 .local/
+.private-backups/
 coverage/
+backups/
 *.log
 *.dump
 .DS_Store

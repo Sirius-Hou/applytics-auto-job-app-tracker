@@ -9,6 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "start": "tsx server/db/migrate.ts && tsx server/index.ts",
     "migrate": "tsx server/db/migrate.ts",
+    "db:backup": "tsx server/db/backup.ts",
     "test": "vitest run",
     "test:db": "tsx server/db/integration.ts",
     "db:local": "tsx server/db/local.ts",

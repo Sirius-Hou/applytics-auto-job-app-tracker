@@ -6,11 +6,14 @@ export const app = express();
 // Local app: deny cross-origin writes, including simple form requests.
 app.use((req, res, next) => {
   const origin = req.get('origin');
+  const isLocalDevelopmentOrigin =
+    process.env.NODE_ENV !== 'production' &&
+    /^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/.test(origin ?? '');
   if (
     origin &&
     origin !== `http://${req.get('host')}` &&
     origin !== `https://${req.get('host')}` &&
-    !['http://127.0.0.1:5173', 'http://localhost:5173'].includes(origin)
+    !isLocalDevelopmentOrigin
   ) {
     res.status(403).json({ error: 'Origin not allowed' });
     return;
