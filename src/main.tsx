@@ -68,21 +68,17 @@ function App() {
       setUser(null);
     }
   }, [clearSessionState]);
-  const loginDemo = useCallback(async () => {
-    setUser(
-      await request<SessionUser>('/auth/login', 'POST', {
-        email: 'demo@test.com',
-        password: 'THISISADEMO',
-      }),
-    );
-  }, []);
   const restartDemo = useCallback(async () => {
-    await request('/auth/logout', 'POST');
-    clearSessionState();
-    await request('/demo/reset', 'POST');
-    setDemoTourStep(1);
-    await loginDemo();
-  }, [clearSessionState, loginDemo]);
+    setUser(undefined);
+    try {
+      await request('/auth/logout', 'POST');
+      clearSessionState();
+      await request('/demo/reset', 'POST');
+      setDemoTourStep(1);
+    } finally {
+      setUser(null);
+    }
+  }, [clearSessionState]);
   useEffect(() => {
     if (isDemoPage) {
       restartDemo().catch((cause) => {
@@ -91,11 +87,9 @@ function App() {
       });
       const restoreDemoSession = (event: PageTransitionEvent) => {
         if (!event.persisted) return;
-        setUser(undefined);
-        loginDemo().catch((cause) => {
-          setError(cause instanceof Error ? cause.message : 'Could not enter the demo');
-          setUser(null);
-        });
+        restartDemo().catch((cause) =>
+          setError(cause instanceof Error ? cause.message : 'Could not reset the demo'),
+        );
       };
       window.addEventListener('pageshow', restoreDemoSession);
       return () => window.removeEventListener('pageshow', restoreDemoSession);
@@ -106,7 +100,7 @@ function App() {
     };
     window.addEventListener('pageshow', restoreLoginScreen);
     return () => window.removeEventListener('pageshow', restoreLoginScreen);
-  }, [isDemoPage, loginDemo, restartDemo, restartFormal]);
+  }, [isDemoPage, restartDemo, restartFormal]);
   useEffect(() => {
     if (view !== 'list' || !user) return;
     let cancelled = false;
