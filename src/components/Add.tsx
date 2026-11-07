@@ -553,7 +553,12 @@ export function Add({
           )}
           <h3>Application record</h3>
           <div className="grid">
-            <Select name="Initial status" value={status} options={statuses} onChange={setStatus} />
+            <Select
+              name="Initial status"
+              value={status}
+              options={statuses.filter((value) => value !== 'OTHER')}
+              onChange={setStatus}
+            />
             <Field name="Application Date" type="date" value={applied} onChange={setApplied} />
           </div>
           <label>

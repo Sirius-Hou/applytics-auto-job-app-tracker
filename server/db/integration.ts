@@ -28,7 +28,7 @@ let server: ReturnType<(typeof import('../app.js'))['app']['listen']> | undefine
 try {
   await migrate();
   await migrate();
-  assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count, '7');
+  assert.equal((await pool.query('SELECT count(*) FROM schema_migrations')).rows[0].count, '9');
   const userId = randomUUID();
   await pool.query('INSERT INTO users(id,email,password_hash) VALUES($1,$2,$3)', [
     userId,
@@ -191,6 +191,17 @@ try {
   const afterDelete = await repo.deleteEvent(userId, a.id, oaEvent.id);
   assert.equal(afterDelete!.status, 'WITHDRAWN');
   assert.equal(afterDelete!.events.length, 4);
+  const customStatus = await repo.addEvent(userId, a.id, {
+    type: 'OTHER',
+    customStatusName: 'Team Match',
+    occurredAt: '2026-09-23T12:00:00Z',
+    notes: '',
+  });
+  assert.equal(customStatus!.status, 'OTHER');
+  assert.equal(customStatus!.customStatusName, 'Team Match');
+  const customEvent = customStatus!.events.find((event) => event.type === 'OTHER')!;
+  const afterCustomDelete = await repo.deleteEvent(userId, a.id, customEvent.id);
+  assert.equal(afterCustomDelete!.status, 'WITHDRAWN');
   const updated = await repo.updateApplication(userId, a.id, {
     notes: 'Updated note',
     appliedAt: '2026-09-02T12:00:00Z',

@@ -24,6 +24,7 @@ export const statuses = [
   'REJECTED',
   'WITHDRAWN',
   'GHOSTED',
+  'OTHER',
 ] as const;
 export const sectionTypes = ['MINIMUM', 'PREFERRED', 'OTHER', 'UNKNOWN'] as const;
 export const skillTypes = [
@@ -178,14 +179,30 @@ export const updateSchema = z
     notes: z.string().max(50000).optional(),
   })
   .strict();
-export const eventSchema = z.object({
-  type: z.enum(statuses),
-  occurredAt: z
-    .string()
-    .datetime({ offset: true })
-    .default(() => new Date().toISOString()),
-  notes: z.string().max(50000).default(''),
-});
+export const eventSchema = z
+  .object({
+    type: z.enum(statuses),
+    customStatusName: z.string().trim().min(1).max(100).nullable().optional(),
+    occurredAt: z
+      .string()
+      .datetime({ offset: true })
+      .default(() => new Date().toISOString()),
+    notes: z.string().max(50000).default(''),
+  })
+  .superRefine((event, context) => {
+    if (event.type === 'OTHER' && !event.customStatusName)
+      context.addIssue({
+        code: 'custom',
+        path: ['customStatusName'],
+        message: 'Required for Other',
+      });
+    if (event.type !== 'OTHER' && event.customStatusName)
+      context.addIssue({
+        code: 'custom',
+        path: ['customStatusName'],
+        message: 'Only valid for Other',
+      });
+  });
 const commaList = (item: z.ZodTypeAny) =>
   z.preprocess(
     (value) =>
@@ -239,6 +256,7 @@ export type AnalyticsFilters = z.infer<typeof analyticsFilterSchema>;
 export type ApplicationEvent = {
   id: string;
   type: (typeof statuses)[number];
+  customStatusName: string | null;
   occurredAt: string;
   notes: string;
 };
@@ -246,6 +264,7 @@ export type Application = {
   id: string;
   job: Job;
   status: (typeof statuses)[number];
+  customStatusName: string | null;
   appliedAt: string;
   notes: string;
   createdAt: string;

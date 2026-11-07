@@ -52,13 +52,14 @@ export async function getApplication(
   ).rows.map((item) => item.role_tag);
   const events = (
     await db.query(
-      'SELECT id,event_type AS type,occurred_at AS "occurredAt",notes FROM application_events WHERE application_id=$1 ORDER BY occurred_at DESC,sequence DESC',
+      'SELECT id,event_type AS type,custom_status_name AS "customStatusName",occurred_at AS "occurredAt",notes FROM application_events WHERE application_id=$1 ORDER BY occurred_at DESC,sequence DESC',
       [id],
     )
   ).rows.map((e) => ({ ...e, occurredAt: e.occurredAt.toISOString() }));
   return {
     id: r.id,
     status: r.current_status,
+    customStatusName: r.current_status_name,
     appliedAt: r.applied_at.toISOString(),
     notes: r.notes,
     createdAt: r.created_at.toISOString(),
@@ -377,7 +378,7 @@ export async function listApplications(userId: string, f: Filters) {
       status: 'a.current_status ASC,a.updated_at DESC,a.id',
     }[f.sort];
     const { rows } = await c.query(
-      `SELECT a.id,a.current_status AS status,a.applied_at AS "appliedAt",a.updated_at AS "updatedAt",c.name AS company,j.title,j.category,j.term,j.work_arrangement AS "workArrangement",
+      `SELECT a.id,a.current_status AS status,a.current_status_name AS "customStatusName",a.applied_at AS "appliedAt",a.updated_at AS "updatedAt",c.name AS company,j.title,j.category,j.term,j.work_arrangement AS "workArrangement",
        (SELECT l.country_code FROM job_locations l WHERE l.job_id=j.id ORDER BY l.display_order LIMIT 1) AS "countryCode"` +
         join +
         where +
@@ -424,7 +425,7 @@ export async function updateApplication(
 export async function addEvent(
   userId: string,
   id: string,
-  event: { type: string; occurredAt: string; notes: string },
+  event: { type: string; customStatusName?: string | null; occurredAt: string; notes: string },
 ) {
   return transaction(async (c) => {
     if (
@@ -437,11 +438,11 @@ export async function addEvent(
     )
       return null;
     await c.query(
-      'INSERT INTO application_events(id,application_id,event_type,occurred_at,notes) VALUES($1,$2,$3,$4,$5)',
-      [randomUUID(), id, event.type, event.occurredAt, event.notes],
+      'INSERT INTO application_events(id,application_id,event_type,custom_status_name,occurred_at,notes) VALUES($1,$2,$3,$4,$5,$6)',
+      [randomUUID(), id, event.type, event.customStatusName ?? null, event.occurredAt, event.notes],
     );
     await c.query(
-      'UPDATE applications SET current_status=(SELECT event_type FROM application_events WHERE application_id=$1 ORDER BY occurred_at DESC,sequence DESC LIMIT 1),updated_at=now() WHERE id=$1',
+      'UPDATE applications SET (current_status,current_status_name)=(SELECT event_type,custom_status_name FROM application_events WHERE application_id=$1 ORDER BY occurred_at DESC,sequence DESC LIMIT 1),updated_at=now() WHERE id=$1',
       [id],
     );
     return getApplication(userId, id, c);
@@ -453,7 +454,7 @@ async function refreshCurrentStatus(applicationId: string, db: Db) {
     `UPDATE applications SET current_status=coalesce(
       (SELECT event_type FROM application_events WHERE application_id=$1 ORDER BY occurred_at DESC,sequence DESC LIMIT 1),
       'SAVED'
-    ),updated_at=now() WHERE id=$1`,
+    ),current_status_name=(SELECT custom_status_name FROM application_events WHERE application_id=$1 ORDER BY occurred_at DESC,sequence DESC LIMIT 1),updated_at=now() WHERE id=$1`,
     [applicationId],
   );
 }
@@ -462,7 +463,7 @@ export async function updateEvent(
   userId: string,
   applicationId: string,
   eventId: string,
-  event: { type: string; occurredAt: string; notes: string },
+  event: { type: string; customStatusName?: string | null; occurredAt: string; notes: string },
 ) {
   return transaction(async (c) => {
     if (
@@ -475,8 +476,15 @@ export async function updateEvent(
     )
       return null;
     const result = await c.query(
-      'UPDATE application_events SET event_type=$3,occurred_at=$4,notes=$5 WHERE id=$2 AND application_id=$1 RETURNING id',
-      [applicationId, eventId, event.type, event.occurredAt, event.notes],
+      'UPDATE application_events SET event_type=$3,custom_status_name=$4,occurred_at=$5,notes=$6 WHERE id=$2 AND application_id=$1 RETURNING id',
+      [
+        applicationId,
+        eventId,
+        event.type,
+        event.customStatusName ?? null,
+        event.occurredAt,
+        event.notes,
+      ],
     );
     if (!result.rowCount) return null;
     await refreshCurrentStatus(applicationId, c);

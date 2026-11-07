@@ -364,7 +364,7 @@ aside {
   margin-top: auto;
 }
 .nav-demo {
-  margin-top: auto;
+  margin-top: 4px;
   border: 1px solid #294c3a;
   border-radius: 7px;
   background: #335c47;
@@ -374,9 +374,6 @@ aside {
 .nav-demo:hover {
   background: #294c3a;
   color: #fff;
-}
-.nav-demo + .nav-settings {
-  margin-top: 4px;
 }
 .aside-footer {
   margin-top: auto;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createSchema, filterSchema, jobSchema } from '../shared/contracts.js';
+import { createSchema, eventSchema, filterSchema, jobSchema } from '../shared/contracts.js';
 import { normalizeCompany } from './normalizers.js';
 import { buildFilters } from './repositories/applications.js';
 
@@ -50,6 +50,14 @@ describe('contracts and query construction', () => {
   it('validates date bounds and paging', () => {
     expect(filterSchema.safeParse({ from: '2026-09-22', to: '2026-01-01' }).success).toBe(false);
     expect(filterSchema.safeParse({ page: 0 }).success).toBe(false);
+  });
+
+  it('requires a name only for custom application statuses', () => {
+    expect(
+      eventSchema.safeParse({ type: 'OTHER', customStatusName: 'Hiring manager chat' }).success,
+    ).toBe(true);
+    expect(eventSchema.safeParse({ type: 'OTHER' }).success).toBe(false);
+    expect(eventSchema.safeParse({ type: 'OA', customStatusName: 'Custom' }).success).toBe(false);
   });
 
   it('uses owner-scoped parameters and EXISTS filters', () => {

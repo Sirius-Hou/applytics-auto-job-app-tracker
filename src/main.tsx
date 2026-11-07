@@ -13,6 +13,7 @@ type Row = {
   company: string | null;
   title: string | null;
   status: string;
+  customStatusName: string | null;
   appliedAt: string;
   category: string;
   term: string;
@@ -223,17 +224,17 @@ function App() {
         >
           ＋ <span>Add Application</span>
         </button>
-        {!isDemoPage && (
-          <a className="nav nav-demo" href="/demo/">
-            🚀 <span>Try Demo</span>
-          </a>
-        )}
         <button
           className={view === 'settings' ? 'nav nav-settings active' : 'nav nav-settings'}
           onClick={() => setView('settings')}
         >
           ⚙ <span>Settings</span>
         </button>
+        {!isDemoPage && (
+          <a className="nav nav-demo" href="/demo/">
+            🚀 <span>Try Demo</span>
+          </a>
+        )}
       </aside>
       {isDemoPage && view === 'list' && demoTourStep >= 1 && demoTourStep <= 3 && (
         <div
@@ -600,7 +601,7 @@ function App() {
                           </td>
                           <td>
                             <span className={'badge ' + a.status.toLowerCase()}>
-                              {label(a.status)}
+                              {a.customStatusName || label(a.status)}
                             </span>
                           </td>
                           <td>{new Date(a.appliedAt).toLocaleDateString()}</td>

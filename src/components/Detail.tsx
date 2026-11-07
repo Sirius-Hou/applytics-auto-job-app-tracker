@@ -92,6 +92,7 @@ export function Detail({
   const [notes, setNotes] = useState(a.notes);
   const [applied, setApplied] = useState(localDay(a.appliedAt));
   const [type, setType] = useState('OA');
+  const [customStatusName, setCustomStatusName] = useState('');
   const [when, setWhen] = useState(localDay());
   const [eventNotes, setEventNotes] = useState('');
   const [editingEvent, setEditingEvent] = useState<ApplicationEvent | null>(null);
@@ -184,7 +185,9 @@ export function Detail({
               .join(' · ')}
           </p>
         </div>
-        <span className={'badge ' + a.status.toLowerCase()}>{label(a.status)}</span>
+        <span className={'badge ' + a.status.toLowerCase()}>
+          {a.customStatusName || label(a.status)}
+        </span>
       </div>
       <div className="detail-grid">
         <div>
@@ -344,9 +347,20 @@ export function Detail({
                         setEditingEvent({
                           ...editingEvent,
                           type: value as ApplicationEvent['type'],
+                          customStatusName:
+                            value === 'OTHER' ? editingEvent.customStatusName : null,
                         })
                       }
                     />
+                    {editingEvent.type === 'OTHER' && (
+                      <Field
+                        name="New Status Name"
+                        value={editingEvent.customStatusName || ''}
+                        onChange={(value) =>
+                          setEditingEvent({ ...editingEvent, customStatusName: value })
+                        }
+                      />
+                    )}
                     <Field
                       name="Event Date"
                       type="date"
@@ -376,6 +390,7 @@ export function Detail({
                                 'PATCH',
                                 {
                                   type: editingEvent.type,
+                                  customStatusName: editingEvent.customStatusName,
                                   occurredAt: editingEvent.occurredAt,
                                   notes: editingEvent.notes,
                                 },
@@ -393,7 +408,7 @@ export function Detail({
                 ) : (
                   <article key={e.id}>
                     <span className="timeline-dot" />
-                    <strong>{label(e.type)}</strong>
+                    <strong>{e.customStatusName || label(e.type)}</strong>
                     <time>{new Date(e.occurredAt).toLocaleDateString()}</time>
                     {e.notes && e.notes !== 'Initial application record' && <p>{e.notes}</p>}
                     <div className="event-actions">
@@ -440,7 +455,22 @@ export function Detail({
             >
               <summary>Update Application Status</summary>
               <div className="status-update-form">
-                <Select name="New Status" value={type} options={statuses} onChange={setType} />
+                <Select
+                  name="New Status"
+                  value={type}
+                  options={statuses}
+                  onChange={(value) => {
+                    setType(value);
+                    if (value !== 'OTHER') setCustomStatusName('');
+                  }}
+                />
+                {type === 'OTHER' && (
+                  <Field
+                    name="New Status Name"
+                    value={customStatusName}
+                    onChange={setCustomStatusName}
+                  />
+                )}
                 <Field name="Status Date" type="date" value={when} onChange={setWhen} />
                 <label>
                   Notes
@@ -448,17 +478,19 @@ export function Detail({
                 </label>
                 <button
                   className="primary"
-                  disabled={busy || !when}
+                  disabled={busy || !when || (type === 'OTHER' && !customStatusName.trim())}
                   onClick={() =>
                     run(async () => {
                       changed(
                         await request<Application>('/applications/' + a.id + '/events', 'POST', {
                           type,
+                          customStatusName: type === 'OTHER' ? customStatusName : null,
                           occurredAt: dayToIso(when),
                           notes: eventNotes,
                         }),
                       );
                       setEventNotes('');
+                      setCustomStatusName('');
                     })
                   }
                 >
