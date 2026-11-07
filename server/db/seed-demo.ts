@@ -27,7 +27,11 @@ if (existing.rowCount) {
     'SELECT count(*) FROM applications WHERE user_id=$1',
     [existing.rows[0].id],
   );
-  console.log(`Demo account already exists with ${count.rows[0].count} applications.`);
+  if (count.rows[0].count !== '20')
+    throw new Error(
+      `Demo account already exists with ${count.rows[0].count} applications; no existing data was changed.`,
+    );
+  console.log('Demo account is already seeded with 20 applications.');
   await pool.end();
   process.exit(0);
 }

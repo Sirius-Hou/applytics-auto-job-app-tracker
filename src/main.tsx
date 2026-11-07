@@ -223,6 +223,11 @@ function App() {
         >
           ＋ <span>Add Application</span>
         </button>
+        {!isDemoPage && (
+          <a className="nav nav-demo" href="/demo/">
+            ▷ <span>Try Demo</span>
+          </a>
+        )}
         <button
           className={view === 'settings' ? 'nav nav-settings active' : 'nav nav-settings'}
           onClick={() => setView('settings')}
@@ -354,11 +359,6 @@ function App() {
               <div>
                 <h1>My Applications</h1>
               </div>
-              {!isDemoPage && (
-                <a className="try-demo-button" href="/demo/">
-                  Try Demo
-                </a>
-              )}
             </div>
             <div className="stats-carousel" aria-label="Application statistics">
               <button
