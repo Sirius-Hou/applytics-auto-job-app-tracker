@@ -18,6 +18,7 @@
     "format:check": "prettier --check src server shared vite.config.ts tsconfig.json package.json README.md"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "google-auth-library": "^11.1.0",
