@@ -52,14 +52,29 @@ function App() {
       setBusy(false);
     }
   }, []);
-  const restartDemo = useCallback(async () => {
-    await request('/demo/reset', 'POST');
-    await request('/auth/logout', 'POST');
+  const clearSessionState = useCallback(() => {
     setDetail(null);
+    setItems([]);
+    setTotal(0);
+    setStats({ total: 0, month: 0, year: 0 });
     setView('list');
+  }, []);
+  const restartFormal = useCallback(async () => {
+    setUser(undefined);
+    try {
+      await request('/auth/logout', 'POST');
+    } finally {
+      clearSessionState();
+      setUser(null);
+    }
+  }, [clearSessionState]);
+  const restartDemo = useCallback(async () => {
+    await request('/auth/logout', 'POST');
+    clearSessionState();
+    await request('/demo/reset', 'POST');
     setDemoTourStep(1);
     setUser(null);
-  }, []);
+  }, [clearSessionState]);
   useEffect(() => {
     if (isDemoPage) {
       restartDemo().catch((cause) => {
@@ -68,12 +83,13 @@ function App() {
       });
       return;
     }
-    fetch('/api/auth/session')
-      .then(async (response) =>
-        setUser(response.ok ? ((await response.json()) as SessionUser) : null),
-      )
-      .catch(() => setUser(null));
-  }, [isDemoPage, restartDemo]);
+    restartFormal().catch(() => setUser(null));
+    const restoreLoginScreen = (event: PageTransitionEvent) => {
+      if (event.persisted) restartFormal().catch(() => setUser(null));
+    };
+    window.addEventListener('pageshow', restoreLoginScreen);
+    return () => window.removeEventListener('pageshow', restoreLoginScreen);
+  }, [isDemoPage, restartDemo, restartFormal]);
   useEffect(() => {
     if (view !== 'list' || !user) return;
     let cancelled = false;
