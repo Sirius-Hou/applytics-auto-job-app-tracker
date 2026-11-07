@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:db": "tsx server/db/integration.ts",
     "db:local": "tsx server/db/local.ts",
+    "db:seed-demo": "tsx server/db/seed-demo.ts",
     "ai:parse": "tsx server/ai/job-parser/cli.ts",
     "format": "prettier --write src server shared vite.config.ts tsconfig.json package.json README.md",
     "format:check": "prettier --check src server shared vite.config.ts tsconfig.json package.json README.md"

@@ -11,6 +11,7 @@ import {
 import { parseJobDescription } from './ai/job-parser/agent.js';
 import * as applications from './repositories/applications.js';
 import { pool } from './db/pool.js';
+import { resetDemoAccount } from './demo/reset.js';
 import {
   changePassword,
   currentUser,
@@ -75,6 +76,10 @@ api.post(
     await logout(req, res);
     res.json({ ok: true });
   }),
+);
+api.post(
+  '/demo/reset',
+  route(async (_req, res) => res.json(await resetDemoAccount())),
 );
 api.get(
   '/health',

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   categories,
   terms,
@@ -11,24 +11,126 @@ import {
   type Application,
 } from '../../shared/contracts';
 import { dayToIso, label, localDay, request, Field, Select, type Runner } from './common';
+import samplePosting from '../demo/sample-jd.txt?raw';
+
+const sampleUrl = samplePosting.match(/^Job URL:\s*(.+)$/m)?.[1].trim() ?? '';
+const sampleDescription = samplePosting.split(/^JD:\s*$/m)[1]?.trim() ?? '';
+if (!sampleUrl || !sampleDescription) throw new Error('The demo job sample is incomplete.');
+
 export function Add({
   busy,
   run,
   saved,
+  demoTourStep = 0,
+  advanceDemoTour,
 }: {
   busy: boolean;
   run: Runner;
   saved: (a: Application) => void;
+  demoTourStep?: number;
+  advanceDemoTour?: () => void;
 }) {
-  const [raw, setRaw] = useState('');
-  const [url, setUrl] = useState('');
+  const [raw, setRaw] = useState(demoTourStep >= 7 ? sampleDescription : '');
+  const [url, setUrl] = useState(demoTourStep >= 7 ? sampleUrl : '');
   const [job, setJob] = useState<Job | null>(null);
   const [status, setStatus] = useState('APPLIED');
   const [applied, setApplied] = useState(localDay());
   const [notes, setNotes] = useState('');
+  const [parseTargetRect, setParseTargetRect] = useState<DOMRect | null>(null);
+  const [saveTargetRect, setSaveTargetRect] = useState<DOMRect | null>(null);
+  useEffect(() => {
+    if (demoTourStep === 8) {
+      window.setTimeout(() => {
+        const target = document.querySelector('.demo-review-target');
+        if (target) window.scrollTo({ top: target.getBoundingClientRect().top + window.scrollY });
+      }, 150);
+      return;
+    }
+    if (demoTourStep === 9) {
+      window.setTimeout(() => {
+        const target = document.querySelector('.demo-save-target');
+        target?.scrollIntoView({ block: 'center' });
+        if (target) setSaveTargetRect(target.getBoundingClientRect());
+      });
+      return;
+    }
+    if (demoTourStep !== 7) return;
+    window.setTimeout(() => {
+      const target = document.querySelector('.demo-parse-target');
+      target?.scrollIntoView({ block: 'center' });
+      if (target) setParseTargetRect(target.getBoundingClientRect());
+    });
+  }, [demoTourStep]);
   const edit = (key: keyof Job, value: unknown) => setJob((j) => (j ? { ...j, [key]: value } : j));
   return (
     <>
+      {(demoTourStep === 7 || demoTourStep === 8 || demoTourStep === 9) && (
+        <div className={`demo-tour demo-tour-step-${demoTourStep}`} role="dialog" aria-modal="true">
+          <div className="demo-tour-backdrop" />
+          {(demoTourStep === 7 ? parseTargetRect : demoTourStep === 9 ? saveTargetRect : null) && (
+            <div
+              className="demo-tour-arrow"
+              aria-hidden="true"
+              style={{
+                top:
+                  demoTourStep === 7
+                    ? parseTargetRect!.top + parseTargetRect!.height + 10
+                    : saveTargetRect!.top - 44,
+                left:
+                  demoTourStep === 7
+                    ? parseTargetRect!.left + parseTargetRect!.width / 2
+                    : saveTargetRect!.left + saveTargetRect!.width / 2,
+              }}
+            >
+              {demoTourStep === 7 ? '↑' : '↓'}
+            </div>
+          )}
+          <section
+            className="demo-tour-card"
+            style={
+              demoTourStep === 7 && parseTargetRect
+                ? {
+                    top: parseTargetRect.top + parseTargetRect.height + 55,
+                    left: Math.min(
+                      window.innerWidth - 460,
+                      Math.max(20, parseTargetRect.left + parseTargetRect.width - 440),
+                    ),
+                    width: 440,
+                    transform: 'none',
+                  }
+                : demoTourStep === 9 && saveTargetRect
+                  ? {
+                      top: Math.max(20, saveTargetRect.top - 250),
+                      left: Math.max(20, saveTargetRect.left + saveTargetRect.width - 440),
+                      width: 440,
+                      transform: 'none',
+                    }
+                  : undefined
+            }
+          >
+            <small>DEMO TOUR · {demoTourStep} OF 9</small>
+            <h2>
+              {demoTourStep === 7
+                ? 'Parse this sample with AI'
+                : demoTourStep === 8
+                  ? 'Review extracted details'
+                  : 'Save this application'}
+            </h2>
+            <p>
+              {demoTourStep === 7
+                ? 'The sample URL and job description are ready. Click Parse with AI and allow about 15–20 seconds. AI output must pass strict validation, so an occasional system glitch may cause an error—click Parse with AI again to retry.'
+                : demoTourStep === 8
+                  ? 'Review every extracted field below and correct anything you want before saving the application.'
+                  : 'Click Add to Applications to save this parsed job to your application history.'}
+            </p>
+            {demoTourStep === 8 && (
+              <button className="primary" onClick={advanceDemoTour}>
+                Next
+              </button>
+            )}
+          </section>
+        </div>
+      )}
       <div className="title-row">
         <div>
           <h1>Add Application</h1>
@@ -40,7 +142,7 @@ export function Add({
         <span className={job ? 'selected' : ''}>02 / Review & correct</span>
         <span>03 / Save to ledger</span>
       </div>
-      <section className="panel form">
+      <section className={`panel form${demoTourStep === 7 ? ' demo-editable-posting' : ''}`}>
         <h2>Original posting</h2>
         <Field
           name="Job URL"
@@ -66,20 +168,24 @@ export function Add({
         <div className="actions">
           <p>AI extraction with strict validation. Missing details stay unknown.</p>
           <button
-            className="primary"
+            className={`primary${demoTourStep === 7 ? ' demo-tour-target demo-parse-target' : ''}`}
             disabled={busy || !raw.trim() || !url}
             onClick={() =>
-              run(async () =>
-                setJob(await request<Job>('/parse', 'POST', { rawJd: raw, originalUrl: url })),
-              )
+              run(async () => {
+                setJob(await request<Job>('/parse', 'POST', { rawJd: raw, originalUrl: url }));
+                if (demoTourStep === 7) advanceDemoTour?.();
+              })
             }
           >
             {busy ? 'Parsing with AI…' : 'Parse with AI →'}
           </button>
         </div>
       </section>
+      {demoTourStep === 7 && <div className="demo-tour-spacer" aria-hidden="true" />}
       {job && (
-        <section className="panel form">
+        <section
+          className={`panel form${demoTourStep === 8 ? ' demo-tour-target demo-review-target' : ''}`}
+        >
           <h2>Review extracted details</h2>
           <p className="muted">
             Check every field before saving. You can add any missing information.
@@ -457,7 +563,7 @@ export function Add({
           <div className="actions">
             <span>Original JD is preserved exactly as pasted.</span>
             <button
-              className="primary"
+              className={`primary${demoTourStep === 9 ? ' demo-tour-target demo-save-target' : ''}`}
               disabled={busy || !applied}
               onClick={() =>
                 run(async () =>
@@ -472,7 +578,7 @@ export function Add({
                 )
               }
             >
-              {busy ? 'Saving…' : 'Save application'}
+              {busy ? 'Saving…' : demoTourStep === 9 ? 'Add to Applications' : 'Save application'}
             </button>
           </div>
         </section>

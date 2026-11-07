@@ -1,0 +1,51 @@
+Job URL: https://www.pinterestcareers.com/jobs/8138039/software-engineering-intern-2027-toronto/?gh_jid=8138039
+
+JD:
+Software Engineering Intern 2027 (Toronto)
+Description
+About Pinterest:
+
+Millions of people around the world come to our platform to find creative ideas, dream about new possibilities and plan for memories that will last a lifetime. At Pinterest, we’re on a mission to bring everyone the inspiration to create a life they love, and that starts with the people behind the product.
+
+Discover a career where you ignite innovation for millions, transform passion into growth opportunities, celebrate each other’s unique experiences and embrace the flexibility to do your best work. Creating a career you love? It’s Possible.
+
+At Pinterest, AI isn't just a feature, it's a powerful partner that augments our creativity and amplifies our impact, and we’re looking for candidates who are excited to be a part of that. To get a complete picture of your experience and abilities, we’ll explore your foundational skills and how you collaborate with AI.
+
+Through our interview process, what matters most is that you can always explain your approach, showing us not just what you know, but how you think. You can read more about our AI interview philosophy and how we use AI in our recruiting process here.
+
+We’re looking for inquisitive, collaborative interns to join our engineering teams. Working closely with mentors and product, design, data, and engineers, you’ll learn how large‑scale systems operate and play a meaningful role in building new technologies, features, and tools. Expect real projects, supportive teammates, and plenty of opportunities to explore ideas that make a difference for our teams and Pinners.
+
+What you’ll do:
+
+Complete assigned technical projects with attention to quality, incorporating feedback from your mentor, manager and peers
+Execute scoped technical tasks end-to-end that contribute to Pinterest products and infrastructure
+Deliver code that is well-documented, tested, and operable
+Share ideas, questions and perspectives clearly and respectfully while learning from feedback
+Build technical and professional skills through learning and development opportunities
+Collaborate with your team and contribute to production-oriented projects that support Pinterest’s goals
+Leverage opportunities to connect with leaders and colleagues across Pinterest and participate in intern program events
+Foundational exposure to AI concepts or AI-assisted software development through coursework, projects, internships or practical experience
+Interest in learning how to use AI-powered technologies responsibly to improve product development, while validating outputs through testing, review and engineering judgment
+What we’re looking for:
+
+Currently enrolled in a Bachelor's degree program in Computer Science, a related technical field, or an equivalent program.
+Demonstrated understanding of core computer science concepts, including data structures and algorithms.
+Familiarity with using AI tools to support learning, productivity, and engineering work, including validating outputs for accuracy and security and knowing when to seek guidance.
+Experience programming in one or more languages, such as Python, Java, JavaScript/TypeScript, Go, or C++. Familiarity with relevant frameworks, tools, or technologies (for example, React) may vary by team.
+Demonstrated software-building experience through coursework, personal or open-source projects, hackathons, code challenges, volunteer work, internships, or similar experiences.
+Demonstrated problem-solving skills and interest in tackling complex technical problems.
+This job posting is for an open vacancy. Please note that the company utilizes artificial intelligence to screen applicants for the positions.
+
+In-Office Requirement Statement:
+
+This onsite internship will be based in our Toronto office requiring a few days in office. Our program will run in a full-time capacity during typical business hours between Monday-Friday.
+This role will need to be in the office for in-person collaboration 2-3 weekdays per week and therefore needs to be within a commutable distance of Toronto.
+Relocation Statement:
+
+This position may be eligible for relocation assistance. Visit our PinFlex page to learn more about our working model.
+Information regarding the culture at Pinterest and benefits available for this position can be found here.
+At Pinterest we believe the workplace should be equitable, inclusive, and inspiring for every employee. In an effort to provide greater transparency, we are sharing the base salary range for this position. Final salary is based on a number of factors including location, travel, relevant prior experience, or particular skills and expertise.
+
+Canada based applicants only
+
+The minimum and maximum salary for this position is CA$6000 - CA$7500 monthly.

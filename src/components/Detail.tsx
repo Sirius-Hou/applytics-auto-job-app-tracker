@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { statuses, type Application, type ApplicationEvent } from '../../shared/contracts';
 import { dayToIso, label, localDay, request, Field, Select, type Runner } from './common';
 
@@ -16,6 +16,7 @@ const skillOrder = [
   'HARDWARE',
   'PROTOCOL_API',
 ] as const;
+type TourTargetRect = { top: number; left: number; width: number; height: number };
 
 function SkillGroup({
   title,
@@ -76,6 +77,8 @@ export function Detail({
   changed,
   back,
   deleted,
+  demoTourStep = 0,
+  advanceDemoTour,
 }: {
   data: Application;
   busy: boolean;
@@ -83,6 +86,8 @@ export function Detail({
   changed: (a: Application) => void;
   back: () => void;
   deleted: () => void;
+  demoTourStep?: number;
+  advanceDemoTour?: () => void;
 }) {
   const [notes, setNotes] = useState(a.notes);
   const [applied, setApplied] = useState(localDay(a.appliedAt));
@@ -90,8 +95,78 @@ export function Detail({
   const [when, setWhen] = useState(localDay());
   const [eventNotes, setEventNotes] = useState('');
   const [editingEvent, setEditingEvent] = useState<ApplicationEvent | null>(null);
+  const [statusUpdateOpen, setStatusUpdateOpen] = useState(demoTourStep === 5);
+  const [statusTargetRect, setStatusTargetRect] = useState<TourTargetRect | null>(null);
+  useEffect(() => {
+    if (demoTourStep === 5) {
+      setStatusUpdateOpen(true);
+      window.setTimeout(() => {
+        const target = document.querySelector('.record-next-step.demo-tour-target');
+        target?.scrollIntoView({ block: 'center' });
+        if (target) {
+          const rect = target.getBoundingClientRect();
+          setStatusTargetRect({
+            top: rect.top,
+            left: rect.left,
+            width: rect.width,
+            height: rect.height,
+          });
+        }
+      });
+    }
+  }, [demoTourStep]);
   return (
     <>
+      {(demoTourStep === 4 || demoTourStep === 5) && (
+        <div
+          className={`demo-tour demo-tour-step-${demoTourStep}`}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="demo-detail-tour-title"
+        >
+          <div className="demo-tour-backdrop" />
+          {demoTourStep === 5 && statusTargetRect && (
+            <div
+              className="demo-tour-arrow"
+              aria-hidden="true"
+              style={{ top: statusTargetRect.top + 22, left: statusTargetRect.left - 25 }}
+            >
+              →
+            </div>
+          )}
+          <section
+            className="demo-tour-card"
+            style={
+              demoTourStep === 5 && statusTargetRect
+                ? {
+                    top: statusTargetRect.top,
+                    left: Math.max(
+                      20,
+                      statusTargetRect.left -
+                        Math.min(380, Math.max(160, statusTargetRect.left - 70)) -
+                        50,
+                    ),
+                    width: Math.min(380, Math.max(160, statusTargetRect.left - 70)),
+                    transform: 'none',
+                  }
+                : undefined
+            }
+          >
+            <small>DEMO TOUR · {demoTourStep} OF 9</small>
+            <h2 id="demo-detail-tour-title">
+              {demoTourStep === 4 ? 'Review the complete posting' : 'Track application progress'}
+            </h2>
+            <p>
+              {demoTourStep === 4
+                ? 'This page preserves the original job description together with the extracted role details and requirements.'
+                : 'Add a custom status update, date, and notes whenever your application progresses.'}
+            </p>
+            <button className="primary" autoFocus onClick={advanceDemoTour}>
+              Next
+            </button>
+          </section>
+        </div>
+      )}
       <button onClick={back}>← All applications</button>
       <div className="title-row">
         <div>
@@ -355,8 +430,14 @@ export function Detail({
               )}
             </div>
           </section>
-          <section className="panel form record-next-step">
-            <details className="status-update-details">
+          <section
+            className={`panel form record-next-step${demoTourStep === 5 ? ' demo-tour-target' : ''}`}
+          >
+            <details
+              className="status-update-details"
+              open={statusUpdateOpen}
+              onToggle={(event) => setStatusUpdateOpen(event.currentTarget.open)}
+            >
               <summary>Update Application Status</summary>
               <div className="status-update-form">
                 <Select name="New Status" value={type} options={statuses} onChange={setType} />

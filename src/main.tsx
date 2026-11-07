@@ -20,7 +20,9 @@ type Row = {
   countryCode: string | null;
   updatedAt: string;
 };
+type TourTargetRect = { top: number; left: number; width: number; height: number };
 function App() {
+  const isDemoPage = ['/demo', '/demo/'].includes(window.location.pathname);
   const [view, setView] = useState<'list' | 'add' | 'detail' | 'settings'>('list');
   const [user, setUser] = useState<SessionUser | null | undefined>(undefined);
   const [items, setItems] = useState<Row[]>([]);
@@ -36,6 +38,8 @@ function App() {
   const [statCard, setStatCard] = useState(0);
   const [statDirection, setStatDirection] = useState(1);
   const [toast, setToast] = useState('');
+  const [demoTourStep, setDemoTourStep] = useState(isDemoPage ? 1 : 0);
+  const [tourTargetRect, setTourTargetRect] = useState<TourTargetRect | null>(null);
   const run = useCallback(async (fn: () => Promise<void>) => {
     setError('');
     setBusy(true);
@@ -47,13 +51,28 @@ function App() {
       setBusy(false);
     }
   }, []);
+  const restartDemo = useCallback(async () => {
+    await request('/demo/reset', 'POST');
+    await request('/auth/logout', 'POST');
+    setDetail(null);
+    setView('list');
+    setDemoTourStep(1);
+    setUser(null);
+  }, []);
   useEffect(() => {
+    if (isDemoPage) {
+      restartDemo().catch((cause) => {
+        setError(cause instanceof Error ? cause.message : 'Could not reset the demo');
+        setUser(null);
+      });
+      return;
+    }
     fetch('/api/auth/session')
       .then(async (response) =>
         setUser(response.ok ? ((await response.json()) as SessionUser) : null),
       )
       .catch(() => setUser(null));
-  }, []);
+  }, [isDemoPage, restartDemo]);
   useEffect(() => {
     if (view !== 'list' || !user) return;
     let cancelled = false;
@@ -111,13 +130,31 @@ function App() {
       cancelled = true;
     };
   }, [view, revision, user]);
+  useEffect(() => {
+    if (!isDemoPage || demoTourStep < 2) return;
+    setTourTargetRect(null);
+    window.setTimeout(() => {
+      const target = document.querySelector('.demo-tour-target');
+      target?.scrollIntoView({ block: 'center' });
+      if (target) {
+        const rect = target.getBoundingClientRect();
+        setTourTargetRect({
+          top: rect.top,
+          left: rect.left,
+          width: rect.width,
+          height: rect.height,
+        });
+      }
+    });
+  }, [demoTourStep, isDemoPage, view]);
   const filter = (k: string, v: string) => {
     setPage(1);
     setFilters({ ...filters, [k]: v });
   };
-  const open = (id: string) =>
+  const open = (id: string, fromTour = false) =>
     run(async () => {
       setDetail(await request<Application>('/applications/' + id));
+      if (fromTour) setDemoTourStep(4);
       setView('detail');
     });
   const showStatistic = (next: number) => {
@@ -151,6 +188,7 @@ function App() {
           </div>
         )}
         <Auth
+          demo={isDemoPage}
           busy={busy}
           run={run}
           signedIn={(account) => {
@@ -162,7 +200,7 @@ function App() {
     );
   return (
     <div className="shell">
-      <aside>
+      <aside className={demoTourStep === 6 ? 'demo-tour-sidebar' : undefined}>
         <a className="brand" href="#" onClick={() => setView('list')}>
           <span className="brand-main">
             <span className="logo">a.</span>
@@ -170,15 +208,16 @@ function App() {
           </span>
         </a>
         <button
-          className={view === 'list' || view === 'detail' ? 'nav active' : 'nav'}
+          className={`${view === 'list' || view === 'detail' ? 'nav active' : 'nav'}${demoTourStep === 1 && view === 'list' ? ' demo-tour-target' : ''}`}
           onClick={() => setView('list')}
         >
           ▤ <span>My Applications</span>
         </button>
         <button
-          className={view === 'add' ? 'nav active' : 'nav'}
+          className={`${view === 'add' ? 'nav active' : 'nav'}${demoTourStep === 6 ? ' demo-tour-target' : ''}`}
           onClick={() => {
             setError('');
+            if (demoTourStep === 6) setDemoTourStep(7);
             setView('add');
           }}
         >
@@ -191,6 +230,117 @@ function App() {
           ⚙ <span>Settings</span>
         </button>
       </aside>
+      {isDemoPage && view === 'list' && demoTourStep >= 1 && demoTourStep <= 3 && (
+        <div
+          className={`demo-tour demo-tour-step-${demoTourStep}`}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="demo-tour-title"
+        >
+          <div className="demo-tour-backdrop" />
+          <div
+            className="demo-tour-arrow"
+            aria-hidden="true"
+            style={
+              demoTourStep === 3 && tourTargetRect
+                ? {
+                    top: tourTargetRect.top - 45,
+                    left: tourTargetRect.left + tourTargetRect.width / 2,
+                  }
+                : undefined
+            }
+          >
+            {demoTourStep === 1 ? '←' : '↓'}
+          </div>
+          <section
+            className="demo-tour-card"
+            style={
+              demoTourStep === 3 && tourTargetRect
+                ? {
+                    top: Math.max(24, tourTargetRect.top - 245),
+                    left: Math.min(
+                      window.innerWidth - 440,
+                      Math.max(20, tourTargetRect.left + tourTargetRect.width / 2 - 210),
+                    ),
+                    transform: 'none',
+                  }
+                : undefined
+            }
+          >
+            <small>DEMO TOUR · {demoTourStep} OF 9</small>
+            <h2 id="demo-tour-title">
+              {demoTourStep === 1
+                ? 'Your application history'
+                : demoTourStep === 2
+                  ? 'Find previous applications'
+                  : 'Open an application'}
+            </h2>
+            <p>
+              {demoTourStep === 1
+                ? 'This is where you can view every application you have saved, including the role, company, status, location, and application date.'
+                : demoTourStep === 2
+                  ? 'Search and filter the jobs you have already applied to.'
+                  : 'Select the first application to review its complete details.'}
+            </p>
+            {demoTourStep < 3 && (
+              <button
+                className="primary"
+                autoFocus
+                onClick={() => setDemoTourStep(demoTourStep + 1)}
+              >
+                Next
+              </button>
+            )}
+          </section>
+        </div>
+      )}
+      {isDemoPage && demoTourStep === 6 && (
+        <div className="demo-tour demo-tour-step-6" role="dialog" aria-modal="true">
+          <div className="demo-tour-backdrop" />
+          <div
+            className="demo-tour-arrow"
+            aria-hidden="true"
+            style={
+              tourTargetRect
+                ? {
+                    top: tourTargetRect.top + tourTargetRect.height / 2 - 17,
+                    left: tourTargetRect.left + tourTargetRect.width + 55,
+                  }
+                : undefined
+            }
+          >
+            ←
+          </div>
+          <section
+            className="demo-tour-card"
+            style={
+              tourTargetRect
+                ? { top: Math.max(20, tourTargetRect.top + tourTargetRect.height / 2 - 95) }
+                : undefined
+            }
+          >
+            <small>DEMO TOUR · 6 OF 9</small>
+            <h2>Try to add a new application</h2>
+            <p>Select Add Application to try AI-assisted job description parsing.</p>
+          </section>
+        </div>
+      )}
+      {isDemoPage && demoTourStep === 10 && (
+        <div className="demo-tour demo-tour-step-10" role="dialog" aria-modal="true">
+          <div className="demo-tour-backdrop" />
+          <section className="demo-tour-card">
+            <small>DEMO COMPLETE</small>
+            <h2>Enjoy exploring Applytics</h2>
+            <p>Your sample application was added. Feel free to explore the rest of the app.</p>
+            <div className="demo-complete-actions">
+              <button onClick={() => run(restartDemo)}>Retry the tour</button>
+              <button className="primary" onClick={() => setDemoTourStep(0)}>
+                Continue exploring
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
       <main>
         {toast && <div className="toast">{toast}</div>}
         {error && (
@@ -204,6 +354,11 @@ function App() {
               <div>
                 <h1>My Applications</h1>
               </div>
+              {!isDemoPage && (
+                <a className="try-demo-button" href="/demo/">
+                  Try Demo
+                </a>
+              )}
             </div>
             <div className="stats-carousel" aria-label="Application statistics">
               <button
@@ -278,7 +433,9 @@ function App() {
                 ›
               </button>
             </div>
-            <section className="panel filters-panel">
+            <section
+              className={`panel filters-panel${demoTourStep === 2 ? ' demo-tour-target' : ''}`}
+            >
               <div className="filters-header">
                 <h2>Search for Jobs</h2>
                 {Object.values(filters).some(Boolean) && (
@@ -318,7 +475,10 @@ function App() {
                   onChange={(v) => filter('category', v)}
                 />
               </div>
-              <details className="advanced-filters">
+              <details
+                className="advanced-filters"
+                open={isDemoPage && demoTourStep >= 2 ? true : undefined}
+              >
                 <summary>Advanced Filters</summary>
                 <div className="filters">
                   <MultiSelect
@@ -422,10 +582,13 @@ function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {items.map((a) => (
+                      {items.map((a, index) => (
                         <tr key={a.id}>
                           <td>
-                            <button className="row-link" onClick={() => open(a.id)}>
+                            <button
+                              className={`row-link${demoTourStep === 3 && index === 0 ? ' demo-tour-target' : ''}`}
+                              onClick={() => open(a.id, demoTourStep === 3 && index === 0)}
+                            >
                               {a.title || 'Untitled position'}
                             </button>
                             <div className="muted">{a.company || 'Company not provided'}</div>
@@ -494,9 +657,16 @@ function App() {
           <Add
             busy={busy}
             run={run}
+            demoTourStep={demoTourStep}
+            advanceDemoTour={() => setDemoTourStep((step) => (step === 9 ? 0 : step + 1))}
             saved={(a) => {
-              setDetail(a);
               setRevision((v) => v + 1);
+              if (demoTourStep === 9) {
+                setDemoTourStep(10);
+                setView('list');
+                return;
+              }
+              setDetail(a);
               setToast('Application added to your list.');
               window.setTimeout(() => setToast(''), 3500);
               setView('detail');
@@ -523,6 +693,8 @@ function App() {
               data={detail}
               busy={busy}
               run={run}
+              demoTourStep={demoTourStep}
+              advanceDemoTour={() => setDemoTourStep((step) => (step === 9 ? 0 : step + 1))}
               changed={(a) => {
                 setDetail(a);
                 setRevision((v) => v + 1);

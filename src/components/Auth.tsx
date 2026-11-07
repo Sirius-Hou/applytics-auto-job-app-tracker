@@ -7,19 +7,21 @@ export function Auth({
   run,
   busy,
   signedIn,
+  demo = false,
 }: {
   run: Runner;
   busy: boolean;
   signedIn: (user: SessionUser) => void;
+  demo?: boolean;
 }) {
   const resetToken = new URLSearchParams(window.location.search).get('token') ?? '';
   const [mode, setMode] = useState<'login' | 'register' | 'forgot' | 'reset'>(() =>
     window.location.pathname === '/reset-password' ? 'reset' : 'login',
   );
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState(demo ? 'demo@test.com' : '');
+  const [password, setPassword] = useState(demo ? 'THISISADEMO' : '');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
+  const [displayName, setDisplayName] = useState(demo ? 'demo' : '');
   const [notice, setNotice] = useState('');
   const [developmentResetUrl, setDevelopmentResetUrl] = useState('');
   const [resetTokenStatus, setResetTokenStatus] = useState<'checking' | 'valid' | 'invalid'>(
@@ -31,6 +33,10 @@ export function Auth({
     mode === 'register' && password.length > 0 && password.length < 5;
 
   useEffect(() => {
+    if (demo) {
+      setGoogleEnabled(false);
+      return;
+    }
     let cancelled = false;
     request<{ googleClientId: string | null }>('/auth/config').then(({ googleClientId }) => {
       if (cancelled) return;
@@ -61,7 +67,7 @@ export function Auth({
     return () => {
       cancelled = true;
     };
-  }, [run, signedIn]);
+  }, [demo, run, signedIn]);
 
   useEffect(() => {
     if (mode !== 'reset') return;
@@ -186,6 +192,11 @@ export function Auth({
 
   return (
     <main className="auth-page">
+      {!demo && (
+        <a className="try-demo-button auth-demo-button" href="/demo/">
+          Try Demo
+        </a>
+      )}
       <section className="auth-card">
         <div className="auth-brand">
           <span className="logo">a.</span>
@@ -278,17 +289,34 @@ export function Auth({
                 Forgot password?
               </button>
             )}
-            <button
-              className="primary auth-submit"
-              disabled={busy || !email || !password || (mode === 'register' && password.length < 5)}
-              onClick={submit}
-            >
-              {busy ? 'Please wait…' : mode === 'login' ? 'Sign In' : 'Create Account'}
-            </button>
+            <div className={demo && mode === 'login' ? 'demo-login-action' : undefined}>
+              <button
+                className="primary auth-submit"
+                disabled={
+                  busy || !email || !password || (mode === 'register' && password.length < 5)
+                }
+                onClick={submit}
+              >
+                {busy ? 'Please wait…' : mode === 'login' ? 'Sign In' : 'Create Account'}
+              </button>
+              {demo && mode === 'login' && (
+                <div className="demo-login-tour-card" role="dialog" aria-modal="true">
+                  <small>DEMO TOUR</small>
+                  <strong>Enter the demo portal</strong>
+                  <p>Click Sign In to explore the complete Applytics feature set.</p>
+                  <span aria-hidden="true">←</span>
+                </div>
+              )}
+            </div>
             <div className="auth-divider">
               <span>or</span>
             </div>
-            {googleEnabled === false ? (
+            {demo ? (
+              <div className="demo-google-notice">
+                Google Sign-In is unavailable in the demo. Try it in the{' '}
+                <a href="https://applytics.siriushou.com/">full version</a>.
+              </div>
+            ) : googleEnabled === false ? (
               <button className="google-placeholder" disabled>
                 Sign in with Google · Setup required
               </button>
@@ -298,6 +326,7 @@ export function Auth({
           </>
         )}
       </section>
+      {demo && mode === 'login' && <div className="demo-login-tour-backdrop" aria-hidden="true" />}
     </main>
   );
 }
