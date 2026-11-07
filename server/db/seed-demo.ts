@@ -37,7 +37,7 @@ if (existing.rowCount) {
 }
 
 const user = await registerWithPassword(
-  { email: 'demo@test.com', password: 'THISISADEMO', displayName: 'demo' },
+  { email: 'demo@test.com', password: 'THISISADEMO', displayName: 'DEMO' },
   { setHeader: () => undefined } as unknown as Response,
 );
 
