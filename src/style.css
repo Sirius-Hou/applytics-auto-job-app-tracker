@@ -365,12 +365,15 @@ aside {
 }
 .nav-demo {
   margin-top: auto;
+  border: 1px solid #294c3a;
   border-radius: 7px;
-  color: #29483e;
+  background: #335c47;
+  color: #fff;
   text-decoration: none;
 }
 .nav-demo:hover {
-  background: #e4ebe2;
+  background: #294c3a;
+  color: #fff;
 }
 .nav-demo + .nav-settings {
   margin-top: 4px;

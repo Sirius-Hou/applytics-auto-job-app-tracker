@@ -225,7 +225,7 @@ function App() {
         </button>
         {!isDemoPage && (
           <a className="nav nav-demo" href="/demo/">
-            ▷ <span>Try Demo</span>
+            🚀 <span>Try Demo</span>
           </a>
         )}
         <button
