@@ -363,7 +363,7 @@ function App() {
           <div className="demo-tour-backdrop" />
           <section className="demo-tour-card">
             <small>DEMO COMPLETE</small>
-            <h2>Enjoy exploring Applytics</h2>
+            <h2>Enjoy exploring Applytics 🎉</h2>
             <p>Your sample application was added. Feel free to explore the rest of the app.</p>
             <div className="demo-complete-actions">
               <button onClick={() => run(restartDemo)}>Retry the tour</button>
