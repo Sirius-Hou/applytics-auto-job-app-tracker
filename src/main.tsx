@@ -698,6 +698,7 @@ function App() {
               if (demoTourStep === 9) {
                 setDemoTourStep(10);
                 setView('list');
+                window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'auto' }));
                 return;
               }
               setDetail(a);
