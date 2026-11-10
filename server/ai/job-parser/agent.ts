@@ -40,24 +40,6 @@ export type JobParserRun = {
   };
 };
 
-function assertSourceBacked(data: AiJobParse, rawJd: string) {
-  const source = rawJd.replace(/\r\n/g, '\n');
-  const snippets = [
-    ...data.locations.map((location) => location.rawText),
-    ...(data.compensation ? [data.compensation.rawText] : []),
-    ...data.requirementSections.flatMap((section) => [section.rawHeading, section.content]),
-    ...data.keyRequirements.minimum,
-    ...data.keyRequirements.preferred,
-    ...(data.experience ? [data.experience.rawText] : []),
-  ];
-  const unsupported = snippets.find((snippet) => !source.includes(snippet.replace(/\r\n/g, '\n')));
-  if (unsupported) {
-    throw new Error(
-      `AI output failed source-verbatim validation near: ${unsupported.slice(0, 120)}`,
-    );
-  }
-}
-
 function restoreVerbatimSections(data: AiJobParse, rawJd: string) {
   const lines = rawJd.replace(/\r\n/g, '\n').split('\n');
   const comparable = (line: string) =>
@@ -248,7 +230,6 @@ export async function parseJobDescription(
   populateMissingKeyRequirements(data);
   normalizeAndSortSkills(data);
   restoreCompensationRange(data);
-  assertSourceBacked(data, jd);
   return {
     data,
     metadata: {

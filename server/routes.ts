@@ -110,16 +110,37 @@ api.delete(
 api.post(
   '/parse',
   route(async (req, res) => {
-    const v = parseInput.parse(req.body);
-    const parsed = await parseJobDescription(v.rawJd);
-    res.json({
-      ...parsed.data,
-      rawJd: v.rawJd,
-      originalUrl: v.originalUrl,
-      canonicalUrl: null,
-      parserModel: parsed.metadata.model,
-      parserVersion: 'v1',
-    });
+    const startedAt = Date.now();
+    let rawJdCharacters: number | undefined;
+    try {
+      const v = parseInput.parse(req.body);
+      rawJdCharacters = v.rawJd.length;
+      const parsed = await parseJobDescription(v.rawJd);
+      console.info('[job-parser] Parse completed', {
+        durationMs: Date.now() - startedAt,
+        rawJdCharacters,
+        model: parsed.metadata.model,
+        inputTokens: parsed.metadata.inputTokens,
+        outputTokens: parsed.metadata.outputTokens,
+        totalTokens: parsed.metadata.totalTokens,
+      });
+      res.json({
+        ...parsed.data,
+        rawJd: v.rawJd,
+        originalUrl: v.originalUrl,
+        canonicalUrl: null,
+        parserModel: parsed.metadata.model,
+        parserVersion: 'v1',
+      });
+    } catch (error) {
+      console.error('[job-parser] Parse failed', {
+        durationMs: Date.now() - startedAt,
+        rawJdCharacters,
+        name: error instanceof Error ? error.name : 'UnknownError',
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   }),
 );
 api.patch(

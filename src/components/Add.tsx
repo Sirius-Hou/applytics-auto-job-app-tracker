@@ -11,6 +11,7 @@ import {
   type Application,
 } from '../../shared/contracts';
 import { dayToIso, label, localDay, request, Field, Select, type Runner } from './common';
+import LatticeLoader from './LatticeLoader';
 import samplePosting from '../demo/sample-jd.txt?raw';
 
 const sampleUrl = samplePosting.match(/^Job URL:\s*(.+)$/m)?.[1].trim() ?? '';
@@ -33,6 +34,7 @@ export function Add({
   const [raw, setRaw] = useState(demoTourStep >= 7 ? sampleDescription : '');
   const [url, setUrl] = useState(demoTourStep >= 7 ? sampleUrl : '');
   const [job, setJob] = useState<Job | null>(null);
+  const [parsing, setParsing] = useState(false);
   const [status, setStatus] = useState('APPLIED');
   const [applied, setApplied] = useState(localDay());
   const [notes, setNotes] = useState('');
@@ -168,16 +170,18 @@ export function Add({
         <div className="actions">
           <p>AI extraction with strict validation. Missing details stay unknown.</p>
           <button
-            className={`primary${demoTourStep === 7 ? ' demo-tour-target demo-parse-target' : ''}`}
+            className={`primary parse-button${parsing ? ' parse-button-loading' : ''}${demoTourStep === 7 ? ' demo-tour-target demo-parse-target' : ''}`}
             disabled={busy || !raw.trim() || !url}
-            onClick={() =>
-              run(async () => {
+            onClick={async () => {
+              setParsing(true);
+              await run(async () => {
                 setJob(await request<Job>('/parse', 'POST', { rawJd: raw, originalUrl: url }));
                 if (demoTourStep === 7) advanceDemoTour?.();
-              })
-            }
+              });
+              setParsing(false);
+            }}
           >
-            {busy ? 'Parsing with AI…' : 'Parse with AI →'}
+            {parsing ? <LatticeLoader /> : 'Parse with AI →'}
           </button>
         </div>
       </section>

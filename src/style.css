@@ -458,6 +458,23 @@ h3 {
 .primary:hover {
   background: #244b35;
 }
+.primary.parse-button {
+  height: calc(1lh + 26px);
+}
+.primary.parse-button-loading:disabled {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  background: #355c45;
+  color: white;
+  opacity: 1;
+}
+.actions .parse-button-loading .lattice-loader,
+.actions .parse-button-loading .lattice-loader span {
+  color: inherit;
+  font-size: inherit;
+}
 .summary {
   background: #e9efdf;
   border: 1px solid #dce5d1;
